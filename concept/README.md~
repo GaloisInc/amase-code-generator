@@ -1,4 +1,5 @@
-cd to middleware then run $ python gen_code_gen.py
+cd to middleware
+run $ python gen_code_gen.py
 
 This code will generate the following:
 
