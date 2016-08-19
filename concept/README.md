@@ -2,9 +2,9 @@ cd to middleware then run $ python gen_code_gen.py
 
 This code will generate the following:
 
-1- Synthesize a controller by running /tulip/controller.py and moving the generated file demo_controller.py to /auto_generated
-2- Generate /auto_generated/auto_code.py
-3- Generate /auto_generated/auto_code.xml
+1. Synthesize a controller by running /tulip/controller.py and moving the generated file demo_controller.py to /auto_generated
+2. Generate /auto_generated/auto_code.py
+3. Generate /auto_generated/auto_code.xml
 
 Then run AMASE and load the scenario file auto_code.xml and run script auto_code.py then hit play.
 
