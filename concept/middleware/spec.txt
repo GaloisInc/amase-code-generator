@@ -1,0 +1,7 @@
+n_uav 2
+n_loc 2
+loc 1 1 2 1000 2000
+loc 2 1.02 2.02 2000 1000
+uav 1 1 2
+uav 2 1.02 2.02
+cmd track_target search_forest
