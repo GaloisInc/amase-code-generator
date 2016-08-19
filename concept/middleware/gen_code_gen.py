@@ -1,4 +1,3 @@
-#from codesynthctrl import codesynthctrl
 import subprocess
 import os
 import shutil
@@ -183,8 +182,6 @@ def get_spec_file():
 
 def make_script(n_loc, n_uav, height, lon, lat, width, commands):
 
-    #csynth = codesynthctrl()
-
     available_commands = ['track_target_cmd', 'search_forest_cmd']
 
     c_input = dict(zip(available_commands, [0 for command in available_commands]))
@@ -192,8 +189,6 @@ def make_script(n_loc, n_uav, height, lon, lat, width, commands):
     for command in commands:
         if command in commands:
             c_input[command] = 1
-
-    #output = csynth.move(**c_input)
 
     script = (
         'import socket{sep}'
@@ -304,7 +299,7 @@ def make_script(n_loc, n_uav, height, lon, lat, width, commands):
 
 if __name__ == "__main__":
 
-    n_loc,n_uav,lat,lon,height,width,uav_lat,uav_lon,commands = get_spec_file()#get_spec_prompt()
+    n_loc,n_uav,lat,lon,height,width,uav_lat,uav_lon,commands = get_spec_file()
 
     make_xml(n_uav,uav_lat,uav_lon,n_loc,lat,lon,width,height)
 
