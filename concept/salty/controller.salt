@@ -1,0 +1,35 @@
+controller DemoController where
+
+input monitor_lowFuel : Bool = False
+input monitor_target  : Bool = False
+input monitor_data    : Bool = False
+
+input play_trackTarget  : Bool = False
+input play_searchForest : Bool = False
+
+output b_search  : Bool = False
+output b_track   : Bool = False
+output b_deliver : Bool = False
+output b_refuel  : Bool = False
+
+
+env_trans
+  -- mutual exclusion for active plays
+  mutex { play_trackTarget, play_searchForest }
+
+sys_trans
+  -- mutual exclusion for active behaviors
+  mutex { b_search, b_refuel, b_track, b_deliver }
+
+  -- target tracking
+  play_trackTarget /\ !monitor_lowFuel /\ !monitor_target -> b_search
+  b_search -> play_trackTarget \/ play_searchForest
+
+  play_trackTarget /\ !monitor_lowFuel /\ monitor_target  -> b_track
+  b_track -> play_trackTarget
+
+  -- forest searching
+  play_searchForest /\ !monitor_lowFuel /\ !monitor_data -> b_search
+
+  -- contingency behavior
+  monitor_lowFuel <-> b_refuel
