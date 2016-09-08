@@ -1,7 +1,12 @@
-n_uav 2
-n_loc 2
+n_uav 3
+n_loc 3
 loc 1 1 2 1000 2000
-loc 2 1.02 2.02 2000 1000
+loc 2 1.05 2.05 4000 3000
+loc 3 1.04 1.978 5000 5000
 uav 1 1 2
-uav 2 1.02 2.02
-cmd track_target search_forest
+uav 2 1.05 2.05
+uav 3 1.04 1.978
+cmd P 1 Loiter 0 0
+cmd P 1 ST 2 B
+cmd P 2 Loiter 0 0
+cmd P 1 ST 2 A
