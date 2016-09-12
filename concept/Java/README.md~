@@ -1,0 +1,11 @@
+Place Play.java
+AMASE/src/Core/afrl/cmasi
+
+Place MultiAgent.java
+AMASE/src/example/amase/examples
+
+Place MultiAgent.sh
+AMASE/run/linux/Examples
+
+Place the directory MultiAgent in
+AMASE/config/examples

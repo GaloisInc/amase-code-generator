@@ -37,7 +37,8 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 import lmcp.LMCPObject
-import math
+from math import pi
+import inspect
 from geopy.distance import vincenty
 from lmcp import LMCPFactory
 from afrl.cmasi import EntityState
@@ -52,9 +53,34 @@ from afrl.cmasi import Waypoint
 from afrl.cmasi import AltitudeType
 from afrl.cmasi import SpeedType
 from afrl.cmasi import TurnType
+import search
+from search import deg2rad
+
+def tokenize(string):
+    keys = ['Type','UAV','Definition','Aux_UAV','Aux_Loc']
+    return dict(zip(keys,string.split('_')))
+
+def get_args(func):
+    args = inspect.getargspec(func).args
+    args = [arg for arg in args if arg != 'self']
+    return args
+
+def convert_heading(heading):
+
+    heading = heading - 90
+
+    if heading <= 0:
+        heading = heading * (-1)
+    else:
+        heading = 360 - heading
+
+    return heading
+
 
 class Map:
+
     def __init__(self,xsize,ysize,blocklength,latcenter,longcenter):
+
         self.xsize = xsize
         self.ysize = ysize
         self.blocklength = blocklength
@@ -94,19 +120,25 @@ class Map:
         longt = float(longt) / 100000000.
         return (lat,longt,50)
 
+def toString(self):
+        return "Location {}: Latitude: {} Longitude: {} Height: {} Width: {}"\
+        .format(self.name,self.center_lat,self.center_lon,self.height,self.width)
+
 class Location:
-    def __init__(self,lat,lon,height,width,name=''):
+
+    def __init__(self,lat=0,lon=0,height=0,width=0,name=''):
+
         self.name = name
         self.center_lat = lat
         self.center_lon = lon
         self.height = height
         self.width = width
-
-    #def partition(self,map):
-    #    for corner in []
+    
 
 class UAV:
-    def __init__(self,id,sock,stateMap):
+
+    def __init__(self,id,sock,stateMap,d_w = 0.001,d_t = 0,d_l = 0,turning_radius = .007):
+
         self.id = id
         self.commandr = MissionCommand.MissionCommand()
         self.commandt = MissionCommand.MissionCommand()
@@ -126,8 +158,15 @@ class UAV:
         self.sock = sock
         self.stateMap = stateMap
         self.state = 'idle'
+        self.d_w = d_w
+        self.d_t = d_t
+        self.d_l = d_l
+        self.turning_radius = turning_radius
+        self.last_wp = None
+        self.current_wp = None
 
     def getit(self,st,id):
+
         if id in list(self.stateMap.keys()):
             if st=='energy':
                 try:
@@ -147,9 +186,233 @@ class UAV:
         else:
             return 0
 
+    def point_search(self,location,X=0,xc=0,xr=0,s=0, step_size = 0.003):
+
+        if self.state != 'point_search':
+            self.state = 'point_search'
+            heading = self.stateMap.get(self.id).get_Heading()
+            longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
+            latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
+            pre_ve = (longtitude,latitude,heading)
+            p = (location.center_lon,location.center_lat,deg2rad(X))
+            pre_ve = (pre_ve[0],pre_ve[1],deg2rad(convert_heading(pre_ve[2])))
+            paths = search.point_search(pre_ve = pre_ve, p = p,xc=deg2rad(xc),xr=deg2rad(xr),s=s,d_t=self.d_t, d_l = self.d_l, turning_radius = self.turning_radius, step_size = step_size)
+
+            self.commandr = MissionCommand.MissionCommand()
+            self.commandr.set_FirstWaypoint(0)
+            self.commandr.set_VehicleID(self.id)
+            self.commandr.set_CommandID(0)
+
+            self.rloc = []
+
+            for path in paths:
+                self.rloc.append(Location(path[1],path[0],0,0))
+
+            nextWaypoint = Waypoint.Waypoint()
+
+            for i in range(len(self.rloc)):
+                nextWaypoint = Waypoint.Waypoint()
+                nextWaypoint.set_Number(i)
+                nextWaypoint.set_NextWaypoint(i+1)
+                nextWaypoint.set_Speed(20)
+                nextWaypoint.set_SpeedType(self.speedType)
+                nextWaypoint.set_ClimbRate(0)
+                nextWaypoint.set_TurnType(self.turnType)
+                nextWaypoint.set_Longitude(self.rloc[i].center_lon)  
+                nextWaypoint.set_Altitude(50)
+                nextWaypoint.set_Latitude(self.rloc[i].center_lat)
+                nextWaypoint.set_AltitudeType(self.altitudeType)
+                self.commandr.get_WaypointList().append(nextWaypoint)
+
+            self.sock.send(LMCPFactory.packMessage(self.commandr, True))
+            return i
+
+    def line_search(self,line, angles=None, smoothing = 10, step_size = 0.5, b = False):
+
+        if self.state != 'line_search':
+            self.state = 'line_search'
+            heading = self.stateMap.get(self.id).get_Heading()
+            longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
+            latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
+            pre_ve = (longtitude,latitude,heading)
+            nextWaypoint = Waypoint.Waypoint()
+            paths = search.line_search(smoothing = smoothing, pre_ve = pre_ve, line = line, angles = deg2rad(angles), turning_radius = self.turning_radius, step_size = step_size, b = False)
+            
+            self.commandr = MissionCommand.MissionCommand()
+            self.commandr.set_FirstWaypoint(0)
+            self.commandr.set_VehicleID(self.id)
+            self.commandr.set_CommandID(0)
+
+            self.rloc = []
+
+            for path in paths:
+                self.rloc.append(Location(path[1],path[0],0,0))
+
+            for i in range(len(self.rloc)):
+                nextWaypoint = Waypoint.Waypoint()
+                nextWaypoint.set_Number(i)
+                nextWaypoint.set_NextWaypoint(i+1)
+                nextWaypoint.set_Speed(20)
+                nextWaypoint.set_SpeedType(self.speedType)
+                nextWaypoint.set_ClimbRate(0)
+                nextWaypoint.set_TurnType(self.turnType)
+                nextWaypoint.set_Longitude(self.rloc[i].center_lon)  
+                nextWaypoint.set_Altitude(50)
+                nextWaypoint.set_Latitude(self.rloc[i].center_lat)
+                nextWaypoint.set_AltitudeType(self.altitudeType)
+                self.commandr.get_WaypointList().append(nextWaypoint)
+
+
+            self.sock.send(LMCPFactory.packMessage(self.commandr, True))
+            return i
+
+    def spiral_search(self, location, extent=.01, alpha=0.9, step = 36, step_size = 0.005):
+
+        if self.state != 'spiral_search':
+            heading = self.stateMap.get(self.id).get_Heading()
+            longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
+            latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
+            pre_ve = (longtitude,latitude,heading)
+            p = (location.center_lon,location.center_lat,0)
+            paths = search.spiral_search(pre_ve = pre_ve, p = p,d_w = self.d_w, d_l = self.d_l, alpha = alpha, extent = extent, step = deg2rad(step), turning_radius = self.turning_radius, step_size = step_size)
+            self.state = 'spiral_search'
+            self.rloc = []
+
+            self.commandr = MissionCommand.MissionCommand()
+            self.commandr.set_FirstWaypoint(0)
+            self.commandr.set_VehicleID(self.id)
+            self.commandr.set_CommandID(0)
+
+            for path in paths:
+                self.rloc.append(Location(path[1],path[0],0,0))
+
+            nextWaypoint = Waypoint.Waypoint()
+
+            for i in range(len(self.rloc)):
+                nextWaypoint = Waypoint.Waypoint()
+                nextWaypoint.set_Number(i)
+                nextWaypoint.set_NextWaypoint(i+1)
+                nextWaypoint.set_Speed(20)
+                nextWaypoint.set_SpeedType(self.speedType)
+                nextWaypoint.set_ClimbRate(0)
+                nextWaypoint.set_TurnType(self.turnType)
+                nextWaypoint.set_Longitude(self.rloc[i].center_lon)  
+                nextWaypoint.set_Altitude(50)
+                nextWaypoint.set_Latitude(self.rloc[i].center_lat)
+                nextWaypoint.set_AltitudeType(self.altitudeType)
+                self.commandr.get_WaypointList().append(nextWaypoint)
+
+            self.sock.send(LMCPFactory.packMessage(self.commandr, True))
+            return i
+
+    def area_search(self,location=None,pre_ve=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.5):
+        
+        if self.state != 'area_search':
+            self.state = 'area_search'
+            nextWaypoint = Waypoint.Waypoint()
+            heading = self.stateMap.get(self.id).get_Heading()
+            longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
+            latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
+            pre_ve = (longtitude,latitude,heading)
+            poly = [(location.center_lon - ((9*(10**(-6))*location.width)/2)
+                ,location.center_lat - ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon - ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat + ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon + ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat - ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon + ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat + ((9*(10**(-6))*location.height)/2))]
+
+            paths = search.area_search(angle = deg2rad(angle) ,pre_ve = pre_ve, poly = poly,xc=deg2rad(xc),xr=deg2rad(xr),
+                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha, turning_radius = self.turning_radius, step_size = step_size)
+            
+            self.commandr = MissionCommand.MissionCommand()
+            self.commandr.set_VehicleID(self.id)
+            self.commandr.set_CommandID(0)
+            self.commandr.set_FirstWaypoint(0)
+
+            self.rloc = []
+            for path in paths:
+                self.rloc.append(Location(path[1],path[0],0,0))            
+
+            for i in range(len(self.rloc)):
+                nextWaypoint = Waypoint.Waypoint()
+                nextWaypoint.set_Number(i)
+                nextWaypoint.set_NextWaypoint(i+1)
+                nextWaypoint.set_Speed(20)
+                nextWaypoint.set_SpeedType(self.speedType)
+                nextWaypoint.set_ClimbRate(0)
+                nextWaypoint.set_TurnType(self.turnType)
+                nextWaypoint.set_Longitude(self.rloc[i].center_lon)  
+                nextWaypoint.set_Altitude(50)
+                nextWaypoint.set_Latitude(self.rloc[i].center_lat)
+                nextWaypoint.set_AltitudeType(self.altitudeType)
+                self.commandr.get_WaypointList().append(nextWaypoint)
+
+            self.sock.send(LMCPFactory.packMessage(self.commandr, True))
+            return i
+
+    def loiter(self,location=None,pre_ve=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.5):
+        
+        if self.state != 'area_search':
+            self.state = 'area_search'
+            nextWaypoint = Waypoint.Waypoint()
+            heading = self.stateMap.get(self.id).get_Heading()
+            longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
+            latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
+            pre_ve = (longtitude,latitude,heading)
+            poly = [(location.center_lon - ((9*(10**(-6))*location.width)/2)
+                ,location.center_lat - ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon - ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat + ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon + ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat - ((9*(10**(-6))*location.height)/2))
+
+                ,(location.center_lon + ((9*(10**(-6))*location.width)/2)
+                    ,location.center_lat + ((9*(10**(-6))*location.height)/2))]
+
+            paths = search.area_search(angle = deg2rad(angle) ,pre_ve = pre_ve, poly = poly,xc=deg2rad(xc),xr=deg2rad(xr),
+                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha, turning_radius = self.turning_radius, step_size = step_size)
+            
+            self.commandr = MissionCommand.MissionCommand()
+            self.commandr.set_VehicleID(self.id)
+            self.commandr.set_CommandID(0)
+            self.commandr.set_FirstWaypoint(0)
+
+            self.rloc = []
+            for path in paths:
+                self.rloc.append(Location(path[1],path[0],0,0))            
+
+            for i in range(len(self.rloc)):
+                nextWaypoint = Waypoint.Waypoint()
+                nextWaypoint.set_Number(i)
+                if i+1 == len(self.rloc):
+                    nextWaypoint.set_NextWaypoint(1)
+                else:
+                    nextWaypoint.set_NextWaypoint(i+1)
+                nextWaypoint.set_Speed(20)
+                nextWaypoint.set_SpeedType(self.speedType)
+                nextWaypoint.set_ClimbRate(0)
+                nextWaypoint.set_TurnType(self.turnType)
+                nextWaypoint.set_Longitude(self.rloc[i].center_lon)  
+                nextWaypoint.set_Altitude(50)
+                nextWaypoint.set_Latitude(self.rloc[i].center_lat)
+                nextWaypoint.set_AltitudeType(self.altitudeType)
+                self.commandr.get_WaypointList().append(nextWaypoint)
+
+            self.sock.send(LMCPFactory.packMessage(self.commandr, True))
+            return i
+
 
     def roam(self,location):
+
         nextWaypoint = Waypoint.Waypoint()
+
         if self.state != 'roaming':
             counter = 0
             self.commandr = MissionCommand.MissionCommand()
@@ -207,6 +470,7 @@ class UAV:
             self.roam_log += 1
 
     def refuel(self,location):
+
         if self.state != 'refueling':
             nextWaypoint = Waypoint.Waypoint()
             nextWaypoint.set_Number(1)
@@ -239,6 +503,7 @@ class UAV:
             self.refueling = 0
 
     def trackTarget(self,id2):
+
         self.state = 'tracking'
         counter = len(self.commandt.get_WaypointList())
 
@@ -273,6 +538,7 @@ class UAV:
                 self.sock.send(LMCPFactory.packMessage(self.commandt, True))   
         
     def searchA(self,location):
+
         self.state = 'searching'
         counter = len(self.commands.get_WaypointList())
 
@@ -320,6 +586,7 @@ class UAV:
             self.search_log += 1
 
     def get_energy(self):
+
         if len(self.stateMap)>0:
             try:
                 return self.stateMap.get(self.id).get_EnergyAvailable()
