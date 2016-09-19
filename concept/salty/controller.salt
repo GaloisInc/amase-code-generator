@@ -1,35 +1,61 @@
-controller DemoController where
+controller CodeSynthCtrl where
 
-input monitor_lowFuel : Bool = False
-input monitor_target  : Bool = False
-input monitor_data    : Bool = False
+input m_1_Fuel_0_0  : Bool = False
+input m_2_Fuel_0_0  : Bool = False
+input m_1_Found_2_0 : Bool = False
 
-input play_trackTarget  : Bool = False
-input play_searchForest : Bool = False
+enum Command = None | ST_2_A | ST_2_B
 
-output b_search  : Bool = False
-output b_track   : Bool = False
-output b_deliver : Bool = False
-output b_refuel  : Bool = False
+input p_1_Command_0_0 : Command = None
+input p_2_Loiter_0_0  : Bool    = True
+
+enum Behavior = Loiter | Refuel | Search | Upload | Track
+
+output b_1_Behavior_0_0 : Behavior = Loiter
+output b_2_Behavior_0_0 : Behavior = Loiter
 
 
-env_trans
-  -- mutual exclusion for active plays
-  mutex { play_trackTarget, play_searchForest }
+-- abbreviations
+def p_1_Loiter_0_0 = p_1_Command_0_0  == None
+def p_1_ST_2_A     = p_1_Command_0_0  == ST_2_A
+def p_1_ST_2_B     = p_1_Command_0_0  == ST_2_B
+
+def b_1_Loiter_0_0 = b_1_Behavior_0_0 == Loiter
+def b_1_Refuel_0_0 = b_1_Behavior_0_0 == Refuel
+def b_1_Search_0_0 = b_1_Behavior_0_0 == Search
+def b_1_Search_0_1 = b_1_Behavior_0_0 == Search
+def b_1_Track_2_0  = b_1_Behavior_0_0 == Track
+def b_2_Loiter_0_0 = b_2_Behavior_0_0 == Loiter
+def b_2_Refuel_0_0 = b_2_Behavior_0_0 == Refuel
+def b_2_Search_0_0 = b_2_Behavior_0_0 == Search
+
 
 sys_trans
-  -- mutual exclusion for active behaviors
-  mutex { b_search, b_refuel, b_track, b_deliver }
+  (p_1_Loiter_0_0 /\ !m_1_Fuel_0_0) -> b_1_Loiter_0_0
+  (p_2_Loiter_0_0 /\ !m_2_Fuel_0_0) -> b_2_Loiter_0_0
 
-  -- target tracking
-  play_trackTarget /\ !monitor_lowFuel /\ !monitor_target -> b_search
-  b_search -> play_trackTarget \/ play_searchForest
 
-  play_trackTarget /\ !monitor_lowFuel /\ monitor_target  -> b_track
-  b_track -> play_trackTarget
+def play cmd health switch b1 b2 =
+  sys_trans
+    (cmd /\ health /\  switch) -> b1
+    (cmd /\ health /\ !switch) -> b2
 
-  -- forest searching
-  play_searchForest /\ !monitor_lowFuel /\ !monitor_data -> b_search
+play p_1_ST_2_A (!m_1_Fuel_0_0) m_1_Found_2_0 b_1_Search_0_0 b_1_Track_2_0
+play p_1_ST_2_B (!m_1_Fuel_0_0) m_1_Found_2_0 b_1_Search_0_1 b_1_Track_2_0
 
-  -- contingency behavior
-  monitor_lowFuel <-> b_refuel
+
+-- Contingency -----------------------------------------------------------------
+
+def contingency health action =
+  sys_trans
+    ! health -> action
+
+contingency (!m_1_Fuel_0_0) b_1_Refuel_0_0
+contingency (!m_2_Fuel_0_0) b_2_Refuel_0_0
+
+
+-- Default Action --------------------------------------------------------------
+
+sys_trans
+  !p_1_Loiter_0_0 -> !b_1_Loiter_0_0
+  !p_2_Loiter_0_0 -> !b_2_Loiter_0_0
