@@ -1,7 +1,7 @@
-from code_synth_ctrl import CodeSynthCtrl
 import os
 import subprocess
 import inspect
+import shutil
 
 def tokenize(string):
     keys = ['Type','UAV','Definition','Aux_UAV','Aux_Loc']
@@ -425,19 +425,29 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
     text_file.close()
 
 if __name__ == "__main__":
+    # Run salty if necessary
+    if not os.path.isfile("code_synth_ctrl.py"):
+        cwd = os.getcwd()
+        os.chdir("../salty")
+        subprocess.check_output("make", shell=True)
+        shutil.move("code_synth_ctrl.py", cwd)
+        os.chdir(cwd)
+
+    from code_synth_ctrl import CodeSynthCtrl
 
     output = get_spec_file()
     csynth = CodeSynthCtrl()
     xml_keys = get_args(make_xml)
     script_keys = get_args(make_script)
     move_keys = get_args(csynth.move)
+    print move_keys
     ctrl_input = {key: 1 if key in output['commands'] else 0 for key in move_keys}
     output['ctrl_input'] = ctrl_input
     xml_input = { key: output[key] for key in xml_keys }
     script_input = { key: output[key] for key in script_keys }
     make_xml(**xml_input)
     make_script(**script_input)
-    
-    os.chdir("../tulip")
-    
-    subprocess.check_output("python controller.py", shell=True)
+
+    # os.chdir("../tulip")
+    # subprocess.check_output("python controller.py", shell=True)
+
