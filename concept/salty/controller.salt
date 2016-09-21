@@ -1,35 +1,39 @@
 controller CodeSynthCtrl where
 
-input m_1_Fuel_0_0  : Bool = False
-input m_2_Fuel_0_0  : Bool = False
-input m_1_Found_2_0 : Bool = False
 
-enum Command = None | ST_2_A | ST_2_B
+-- Fuel monitors are False when the fuel level is OK
+input m_1_Fuel_0_0 (M_1_Fuel_0_0) : Bool = False
+input m_2_Fuel_0_0 (M_2_Fuel_0_0) : Bool = False
 
-input p_1_Command_0_0 : Command = None
-input p_2_Loiter_0_0  : Bool    = True
+-- Target monitor is True when the target is found
+input m_1_Found_2_0 (M_1_Found_2_0) : Bool = False
 
-enum Behavior = Loiter | Refuel | Search | Upload | Track
+input p_1_Loiter_0_0 (P_1_Loiter_0_0) : Bool = True
+input p_2_Loiter_0_0 (P_2_Loiter_0_0) : Bool = True
+input p_1_ST_2_A     (P_1_ST_2_A    ) : Bool = False
+input p_1_ST_2_B     (P_1_ST_2_B    ) : Bool = False
 
-output b_1_Behavior_0_0 : Behavior = Loiter
-output b_2_Behavior_0_0 : Behavior = Loiter
+output b_1_Refuel_0_0 (b_1_Refuel_0_0) : Bool = False
+output b_2_Refuel_0_0 (b_2_Refuel_0_0) : Bool = False
+output b_1_Search_0_0 (b_1_Search_0_0) : Bool = False
+output b_1_Search_0_1 (b_1_Search_0_1) : Bool = False
+output b_1_Upload_0_0 (b_1_Upload_0_0) : Bool = False
+output b_1_Track_2_0  (b_1_Track_2_0 ) : Bool = False
+output b_1_Loiter_0_0 (b_1_Loiter_0_0) : Bool = True
+output b_2_Loiter_0_0 (b_2_Loiter_0_0) : Bool = True
 
+-- mutual exclusion for plays
+env_trans
+  mutex { p_1_Loiter_0_0, p_1_ST_2_A, p_1_ST_2_B }
 
--- abbreviations
-def p_1_Loiter_0_0 = p_1_Command_0_0  == None
-def p_1_ST_2_A     = p_1_Command_0_0  == ST_2_A
-def p_1_ST_2_B     = p_1_Command_0_0  == ST_2_B
+-- mutual exclusion for behaviors
+sys_trans
+  mutex { b_1_Refuel_0_0, b_1_Search_0_0, b_1_Search_0_1, b_1_Upload_0_0
+        , b_1_Track_2_0, b_1_Loiter_0_0 }
 
-def b_1_Loiter_0_0 = b_1_Behavior_0_0 == Loiter
-def b_1_Refuel_0_0 = b_1_Behavior_0_0 == Refuel
-def b_1_Search_0_0 = b_1_Behavior_0_0 == Search
-def b_1_Search_0_1 = b_1_Behavior_0_0 == Search
-def b_1_Track_2_0  = b_1_Behavior_0_0 == Track
-def b_2_Loiter_0_0 = b_2_Behavior_0_0 == Loiter
-def b_2_Refuel_0_0 = b_2_Behavior_0_0 == Refuel
-def b_2_Search_0_0 = b_2_Behavior_0_0 == Search
+  mutex { b_2_Refuel_0_0, b_2_Loiter_0_0 }
 
-
+-- loitering
 sys_trans
   (p_1_Loiter_0_0 /\ !m_1_Fuel_0_0) -> b_1_Loiter_0_0
   (p_2_Loiter_0_0 /\ !m_2_Fuel_0_0) -> b_2_Loiter_0_0
