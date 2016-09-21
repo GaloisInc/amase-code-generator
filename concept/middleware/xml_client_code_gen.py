@@ -440,7 +440,6 @@ if __name__ == "__main__":
     xml_keys = get_args(make_xml)
     script_keys = get_args(make_script)
     move_keys = get_args(csynth.move)
-    print move_keys
     ctrl_input = {key: 1 if key in output['commands'] else 0 for key in move_keys}
     output['ctrl_input'] = ctrl_input
     xml_input = { key: output[key] for key in xml_keys }

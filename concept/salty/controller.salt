@@ -13,14 +13,14 @@ input p_2_Loiter_0_0 (P_2_Loiter_0_0) : Bool = True
 input p_1_ST_2_A     (P_1_ST_2_A    ) : Bool = False
 input p_1_ST_2_B     (P_1_ST_2_B    ) : Bool = False
 
-output b_1_Refuel_0_0 (b_1_Refuel_0_0) : Bool = False
-output b_2_Refuel_0_0 (b_2_Refuel_0_0) : Bool = False
-output b_1_Search_0_0 (b_1_Search_0_0) : Bool = False
-output b_1_Search_0_1 (b_1_Search_0_1) : Bool = False
-output b_1_Upload_0_0 (b_1_Upload_0_0) : Bool = False
-output b_1_Track_2_0  (b_1_Track_2_0 ) : Bool = False
-output b_1_Loiter_0_0 (b_1_Loiter_0_0) : Bool = True
-output b_2_Loiter_0_0 (b_2_Loiter_0_0) : Bool = True
+output b_1_Refuel_0_0 (B_1_Refuel_0_0) : Bool = False
+output b_2_Refuel_0_0 (B_2_Refuel_0_0) : Bool = False
+output b_1_Search_0_0 (B_1_Search_0_0) : Bool = False
+output b_1_Search_0_1 (B_1_Search_0_1) : Bool = False
+output b_1_Upload_0_0 (B_1_Upload_0_0) : Bool = False
+output b_1_Track_2_0  (B_1_Track_2_0 ) : Bool = False
+output b_1_Loiter_0_0 (B_1_Loiter_0_0) : Bool = True
+output b_2_Loiter_0_0 (B_2_Loiter_0_0) : Bool = True
 
 -- mutual exclusion for plays
 env_trans

@@ -22,3 +22,6 @@ clean:
 
 print-%:
 	@echo "$* = $($*)"
+
+gen-%:
+	$(SALTY) -s $(SLUGS) -p $*
