@@ -193,6 +193,7 @@ def get_spec_file():
                     output['uav_lon'][int(x[1]) - 1] = float(x[3])
                 if x[0] == 'cmd':
                     commands.append(x[1:])
+    print output
 
     output['commands'] = map(stringify,commands)
 
@@ -215,15 +216,22 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
         'from afrl.cmasi import AirVehicleState{sep}'
         'from afrl.cmasi import AirVehicleConfiguration{sep}'
         'from afrl.cmasi.SessionStatus import SessionStatus{sep}'
+        'from afrl.cmasi import Play{sep}'
         'from demo_controller import ExampleCtrl{sep}'
         'from PyMASE import UAV, Location, get_args{sep}'
         'import string{sep}'
         '{sep}stateMap = dict(){sep}'
+        'playMap = dict(){sep}'
         'M1 = ExampleCtrl(){sep}'
         'configMap = dict(){sep}'
         'move_keys = get_args(M1.move){sep}'
         'ctrl_input = {{key: 0 for key in move_keys}}{sep}').format(sep='\n', ind='    ') 
-    
+
+    script += (
+        '{sep}def get_play_gui(play_map):{sep}'
+        '{sep}{ind}return 0{sep}')\
+    .format(sep='\n', ind='    ') 
+  
     script += (
         '{sep}def prepare_ctrl_input(UAVs,ctrl_input_args,current_plays):{sep}'
         '{sep}{ind}ctrl_input = dict(zip(ctrl_input_args, [0]*len(ctrl_input_args))){sep}')\
@@ -274,7 +282,7 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
                     script += (
                     '{sep}def {monitor}_monitor(uav,uav2,loc):{sep}'
                     '{ind}dist = vincenty((uav.getit("latitude",uav.id),uav.getit("longitude",uav.id))\{sep}'+
-                    '{ind},(uav.getit("latitude",uav2+1),uav.getit("longitude",uav2+1))).meters{sep}'
+                    '{ind},(uav.getit("latitude",uav2),uav.getit("longitude",uav2))).meters{sep}'
                     '{ind}if dist < 600 and dist != 0:{sep}'
                     '{ind}{ind}uav.Found = 1{sep}'
                     '{ind}else:{sep}'
@@ -323,16 +331,23 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
                     , aux1 = token['Aux_UAV'], aux2 = token['Aux_Loc']) 
 
     script +=(
-
         '{sep}def message_received(obj):{sep}'
         '{ind}global stateMap{sep}'
         '{ind}global configMap{sep}'
+        '{ind}global playMap{sep}'
+        '{ind}global commandMap{sep}'
+        '{ind}global time{sep}'
         '{ind}if isinstance(obj ,AirVehicleConfiguration.AirVehicleConfiguration):{sep}'
         '{ind}{ind}configMap[obj.get_ID()] = obj{sep}'
         '{ind}elif isinstance(obj, AirVehicleState.AirVehicleState): {sep}'
         '{ind}{ind}stateMap[obj.get_ID()] = obj{sep}'
+        '{ind}elif isinstance(obj ,SessionStatus):{sep}'
+        '{ind}{ind}time = obj.get_ScenarioTime(){sep}'
+        '{ind}elif isinstance(obj, Play.Play):{sep}'
+        '{ind}{ind}playMap[obj.get_UAVID()] = obj{sep}'
         '{ind}elif isinstance(obj, SessionStatus):{sep}'
         '{ind}{ind}ss = obj{sep}'
+
 
         '{sep}def connect():{sep}'
         '{ind}sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM){sep}'
@@ -397,7 +412,8 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
             , aux1 = token['Aux_UAV'], aux2 = token['Aux_Loc'])      
 
     script += ('{sep}{ind}{ind}ctrl_input_args = get_args(M1.move){sep}'
-        '{sep}{ind}{ind}current_plays = ["P_1_ST_2_A", "P_2_Loiter_0_0"]{sep}'
+        '{sep}{ind}{ind}//current_plays = ["P_1_ST_2_A", "P_2_Loiter_0_0"]{sep}'
+        '{sep}{ind}{ind}//current_plays = get_play_gui(playMap){sep}'
         '{sep}{ind}{ind}ctrl_input = prepare_ctrl_input(UAVs,ctrl_input_args,current_plays){sep}'
         '{sep}{ind}{ind}output = M1.move(**ctrl_input){sep}'
         ).format(sep='\n',ind='    ')
