@@ -7,6 +7,6 @@ uav 1 1 2
 uav 2 1.05 2.05
 uav 3 1.04 1.978
 cmd P 1 Loiter 0 0
-cmd P 1 ST 2 B
+cmd P 1 ST 2 2
 cmd P 2 Loiter 0 0
-cmd P 1 ST 2 A
+cmd P 1 ST 2 1

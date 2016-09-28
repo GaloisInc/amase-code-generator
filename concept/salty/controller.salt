@@ -1,4 +1,4 @@
-controller CodeSynthCtrl where
+controller DemoController where
 
 
 -- Fuel monitors are False when the fuel level is OK

@@ -2,6 +2,94 @@ import os
 import subprocess
 import inspect
 import shutil
+import sys
+
+
+class Behavior():
+    def __init__(self, uav, uav2, loc):
+        self.uav  = int(uav)
+        self.uav2 = int(uav2)
+        self.loc  = int(loc)
+
+    def __eq__(self, other):
+        return self.uav == other.uav \
+                and self.uav2 == other.uav2 \
+                and self.loc  == other.loc
+
+    def __hash__(self):
+        return hash((self.uav, self.uav2, self.loc))
+
+class RefuelBehavior(Behavior):
+    """The Refuel behavior"""
+
+    def __str__(self):
+        return ('B_%d_Refuel_%d_%d' % (self.uav, self.uav2, self.loc))
+
+class LoiterBehavior(Behavior):
+    """The Loiter behavior """
+
+    def __str__(self):
+        return ('B_%d_Loiter_%d_%d' % (self.uav, self.uav2, self.loc))
+
+class SearchBehavior(Behavior):
+    """The Search behavior"""
+
+    def __str__(self):
+        return ('B_%d_Search_%d_%d' % (self.uav, self.uav2, self.loc))
+
+class TrackBehavior(Behavior):
+    """The Track behavior"""
+
+    def __str__(self):
+        return ('B_%d_Track_%d_%d' % (self.uav, self.uav2, self.loc))
+
+class Play():
+    @staticmethod
+    def make(descr):
+        descr = descr.split('_')
+
+        if descr[2] == 'Loiter':
+            return LoiterPlay(descr[1], descr[3])
+
+        elif descr[2] == 'ST':
+            return STPlay(descr[1], descr[3], descr[4])
+
+        else:
+            raise RuntimeError('Invalid play: ' + descr[2])
+
+    def behaviors(self):
+        return set()
+
+class STPlay(Play):
+    """Search and track for the spescified uav, in the region provided.  """
+
+    def __init__(self, uav, target, loc):
+        self.uav    = int(uav)
+        self.target = int(target)
+        self.loc    = loc
+
+    def __str__(self):
+        return ('P_%s_ST_%s_%s' % (self.uav, self.target, self.loc))
+
+    def behaviors(self):
+        return set([
+                SearchBehavior(self.uav, self.target, self.loc),
+                TrackBehavior(self.uav, self.target, self.loc)])
+
+class LoiterPlay(Play):
+    """The Loiter play"""
+
+    def __init__(self, uav, loc):
+        self.uav = int(uav)
+        self.loc = int(loc)
+
+    def __str__(self):
+        return ('P_%s_Loiter_0_0' % self.uav)
+
+    def behaviors(self):
+        return set([
+                LoiterBehavior(self.uav, 0, self.loc)])
+
 
 def tokenize(string):
     keys = ['Type','UAV','Definition','Aux_UAV','Aux_Loc']
@@ -424,19 +512,35 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
     text_file.write("%s" % script)
     text_file.close()
 
+
+def scenario_deps(output):
+
+    deps = set()
+
+    for command in output['commands']:
+        cmd = Play.make(command)
+        deps = deps.union(cmd.behaviors())
+
+    return deps
+
+
 if __name__ == "__main__":
-    # Run salty if necessary
-    if not os.path.isfile("code_synth_ctrl.py"):
-        cwd = os.getcwd()
-        os.chdir("../salty")
-        subprocess.check_output("make", shell=True)
-        shutil.move("code_synth_ctrl.py", cwd)
-        os.chdir(cwd)
 
-    from code_synth_ctrl import CodeSynthCtrl
-
+    # TODO: switch the specification format to JSON
     output = get_spec_file()
+
+    # determine which monitors will be required by the scenario
+    deps = scenario_deps(output)
+    print [ str(x) for x in deps ]
+
+    sys.exit()
+
+    for x in output:
+        print ("%s = %s" % (x, output[x]))
+    sys.exit()
+
     csynth = CodeSynthCtrl()
+
     xml_keys = get_args(make_xml)
     script_keys = get_args(make_script)
     move_keys = get_args(csynth.move)
@@ -447,6 +551,8 @@ if __name__ == "__main__":
     make_xml(**xml_input)
     make_script(**script_input)
 
-    # os.chdir("../tulip")
-    # subprocess.check_output("python controller.py", shell=True)
+    # TODO: generate the controller from the specification
 
+    # Run salty to generate the final controller
+    os.chdir("../salt")
+    subprocess.check_output("make", shell=True)
