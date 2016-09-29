@@ -5,6 +5,71 @@ import shutil
 import sys
 
 
+# Scenario Specification ######################################################
+
+class Scenario():
+    @staticmethod
+    def parse(file):
+        """Parse the spec file, and produce a scenario"""
+        locs = []
+        uavs = []
+
+        with open(file, 'r') as f:
+            for x in f:
+                x = x.split()
+                if len(x[0]) > 2:
+
+                    if x[0] == 'uav':
+                        uavs.append(UAV(int(x[1]), float(x[2]), float(x[3])))
+                        continue
+
+                    if x[0] == 'loc':
+                        locs.append(Location(int(x[1]), float(x[2]),
+                            float(x[3]), float(x[4]), float(x[5])))
+                        continue
+
+                    if x[0] == 'cmd':
+                        play = Play.make(x[1:])
+                        uavs[play.uav - 1].addPlay(play)
+                        continue
+
+                    print ('Unknown command: %s' % x[0])
+
+        return Scenario(locs, uavs)
+
+
+    def __init__(self, locs, uavs):
+        self.locs = locs
+        self.uavs = uavs
+
+    def dependencies(self):
+        """Produce the behavior and monitor dependencies for this scenario"""
+        behaviors = set()
+        monitors  = set()
+
+        for uav in self.uavs:
+            behaviors = behaviors.union(uav.behaviors())
+            monitors  = monitors.union(uav.monitors())
+
+        return (behaviors, monitors)
+
+
+
+
+# Locations ###################################################################
+
+class Location():
+    def __init__(self, num, lat, lon, width, height):
+        self.num    = num
+        self.lat    = lat
+        self.lon    = lon
+        self.width  = width
+        self.height = height
+
+    def __str__(self):
+        return ('L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height))
+
+
 # UAVs ########################################################################
 
 class UAV():
@@ -54,7 +119,7 @@ class FuelMonitor(Monitor):
         self.uav = uav
 
     def __str__(self):
-        return ('P_%d_Fuel_0_0' % self.uav)
+        return ('M_%d_Fuel_0_0' % self.uav)
 
 class FoundMonitor(Monitor):
     def __init__(self, uav, target):
@@ -62,8 +127,7 @@ class FoundMonitor(Monitor):
         self.target = target
 
     def __str__(self):
-        return ('P_%d_Found_%d_0' % (self.uav, self.target))
-
+        return ('M_%d_Found_%d_0' % (self.uav, self.target))
 
 
 # Behaviors ###################################################################
@@ -112,8 +176,6 @@ class TrackBehavior(Behavior):
 class Play():
     @staticmethod
     def make(descr):
-        descr = descr.split('_')
-
         if descr[2] == 'Loiter':
             return LoiterPlay(descr[1], descr[3])
 
@@ -324,42 +386,6 @@ def make_xml(n_uav,uav_lat,uav_lon,n_loc,loc_lat,loc_lon,width,height):
     text_file = open("../auto_generated/auto_code.xml", "w+")
     text_file.write("%s" % xmlscript)
     text_file.close()
-
-
-def get_spec_file():
-
-    commands = []
-    keys = ['n_loc','n_uav','loc_lat','loc_lon','height','width','uav_lat','uav_lon','commands']
-    output = dict(zip(keys, [None]*len(keys)))
-
-    with open('spec.txt','r') as f:
-        for x in f:
-            x = x.split()
-            if len(x[0]) > 2:
-                if x[0] == 'n_uav':
-                    output['n_uav'] = int(x[1])
-                    output['uav_lat'] = [0]*output['n_uav']
-                    output['uav_lon'] = [0]*output['n_uav']
-                if x[0] == 'n_loc':
-                    output['n_loc'] = int(x[1])
-                    output['loc_lat'] = [0]*output['n_loc']
-                    output['loc_lon'] = [0]*output['n_loc']
-                    output['height'] = [0]*output['n_loc']
-                    output['width'] = [0]*output['n_loc']
-                if x[0] == 'loc':
-                    output['loc_lat'][int(x[1]) - 1] = float(x[2])
-                    output['loc_lon'][int(x[1]) - 1] = float(x[3])
-                    output['height'][int(x[1]) - 1] = float(x[4])
-                    output['width'][int(x[1]) - 1] = float(x[5])
-                if x[0] == 'uav':
-                    output['uav_lat'][int(x[1]) - 1] = float(x[2])
-                    output['uav_lon'][int(x[1]) - 1] = float(x[3])
-                if x[0] == 'cmd':
-                    commands.append(x[1:])
-
-    output['commands'] = map(stringify,commands)
-
-    return output
 
 
 def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
@@ -588,36 +614,13 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
     text_file.close()
 
 
-def scenario_deps(output):
-
-    # load uavs
-    uavs = dict()
-    for i in range(0,output['n_uav']):
-        uavs[i+1] = UAV(i+1, output['uav_lat'][i], output['uav_lon'][i])
-
-    # add plays to uavs
-    for command in output['commands']:
-        play = Play.make(command)
-        uavs[play.uav].addPlay(play)
-
-    # calculate dependencies
-    behaviors = set()
-    monitors  = set()
-    for i in uavs:
-        uav       = uavs[i]
-        behaviors = behaviors.union(uav.behaviors())
-        monitors  = monitors.union(uav.monitors())
-
-    return (behaviors, monitors)
-
-
 if __name__ == "__main__":
 
     # TODO: maybe switch the specification format to JSON?
-    output = get_spec_file()
+    spec = Scenario.parse('spec.txt')
 
     # determine which monitors will be required by the scenario
-    behaviors, monitors = scenario_deps(output)
+    behaviors, monitors = spec.dependencies()
 
     print [ str(x) for x in behaviors ]
     print [ str(x) for x in monitors ]
