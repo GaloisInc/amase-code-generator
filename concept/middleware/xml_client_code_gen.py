@@ -5,6 +5,36 @@ import shutil
 import sys
 
 
+# UAVs ########################################################################
+
+class UAV():
+    def __init__(self, num, lat, lon):
+        self.num   = num
+        self.lat   = lat
+        self.lon   = lon
+        self.plays = []
+
+    def addPlay(self, play):
+        self.plays.append(play)
+
+    def __str__(self):
+        return '<UAV ' + str(self.num) + ' ' \
+                + str(self.lat) + ' ' \
+                + str(self.lon) + '>'
+
+    def behaviors(self):
+        # start as just the contingency behavior
+        deps = set([RefuelBehavior(self.num, 0, 0)])
+
+        # add in behaviors required for each play
+        for play in self.plays:
+            deps = deps.union(play.behaviors())
+
+        return deps
+
+
+# Behaviors ###################################################################
+
 class Behavior():
     def __init__(self, uav, uav2, loc):
         self.uav  = int(uav)
@@ -42,6 +72,9 @@ class TrackBehavior(Behavior):
 
     def __str__(self):
         return ('B_%d_Track_%d_%d' % (self.uav, self.uav2, self.loc))
+
+
+# Plays #######################################################################
 
 class Play():
     @staticmethod
@@ -90,6 +123,8 @@ class LoiterPlay(Play):
         return set([
                 LoiterBehavior(self.uav, 0, self.loc)])
 
+
+# Code-gen Support ############################################################
 
 def tokenize(string):
     keys = ['Type','UAV','Definition','Aux_UAV','Aux_Loc']
@@ -517,34 +552,40 @@ def scenario_deps(output):
 
     deps = set()
 
+    # load uavs
+    uavs = dict()
+    for i in range(0,output['n_uav']):
+        uavs[i+1] = UAV(i+1, output['uav_lat'][i], output['uav_lon'][i])
+
+    # add plays to uavs
     for command in output['commands']:
-        cmd = Play.make(command)
-        deps = deps.union(cmd.behaviors())
+        play = Play.make(command)
+        uavs[play.uav].addPlay(play)
+
+    # calculate dependencies
+    for i in uavs:
+        uav  = uavs[i]
+        deps = deps.union(uav.behaviors())
 
     return deps
 
 
 if __name__ == "__main__":
 
-    # TODO: switch the specification format to JSON
+    # TODO: maybe switch the specification format to JSON?
     output = get_spec_file()
 
     # determine which monitors will be required by the scenario
     deps = scenario_deps(output)
+
     print [ str(x) for x in deps ]
 
     sys.exit()
 
-    for x in output:
-        print ("%s = %s" % (x, output[x]))
-    sys.exit()
-
-    csynth = CodeSynthCtrl()
-
-    xml_keys = get_args(make_xml)
+    xml_keys    = get_args(make_xml)
     script_keys = get_args(make_script)
-    move_keys = get_args(csynth.move)
-    ctrl_input = {key: 1 if key in output['commands'] else 0 for key in move_keys}
+    move_keys   = get_args(csynth.move)
+    ctrl_input  = {key: 1 if key in output['commands'] else 0 for key in move_keys}
     output['ctrl_input'] = ctrl_input
     xml_input = { key: output[key] for key in xml_keys }
     script_input = { key: output[key] for key in script_keys }
