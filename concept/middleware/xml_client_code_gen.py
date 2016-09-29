@@ -32,6 +32,39 @@ class UAV():
 
         return deps
 
+    def monitors(self):
+        """The set of monitors that this UAV requires"""
+        # each uav requires the fuel monitor for its refueling contingency
+        # behavior
+        deps = set([FuelMonitor(self.num)])
+
+        for play in self.plays:
+            deps = deps.union(play.monitors())
+
+        return deps
+
+
+# Monitors ####################################################################
+
+class Monitor():
+    pass
+
+class FuelMonitor(Monitor):
+    def __init__(self, uav):
+        self.uav = uav
+
+    def __str__(self):
+        return ('P_%d_Fuel_0_0' % self.uav)
+
+class FoundMonitor(Monitor):
+    def __init__(self, uav, target):
+        self.uav = uav
+        self.target = target
+
+    def __str__(self):
+        return ('P_%d_Found_%d_0' % (self.uav, self.target))
+
+
 
 # Behaviors ###################################################################
 
@@ -93,6 +126,9 @@ class Play():
     def behaviors(self):
         return set()
 
+    def monitors(self):
+        return set()
+
 class STPlay(Play):
     """Search and track for the spescified uav, in the region provided.  """
 
@@ -108,6 +144,10 @@ class STPlay(Play):
         return set([
                 SearchBehavior(self.uav, self.target, self.loc),
                 TrackBehavior(self.uav, self.target, self.loc)])
+
+    def monitors(self):
+        return set([
+            FoundMonitor(self.uav, self.target)])
 
 class LoiterPlay(Play):
     """The Loiter play"""
@@ -550,8 +590,6 @@ def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
 
 def scenario_deps(output):
 
-    deps = set()
-
     # load uavs
     uavs = dict()
     for i in range(0,output['n_uav']):
@@ -563,11 +601,14 @@ def scenario_deps(output):
         uavs[play.uav].addPlay(play)
 
     # calculate dependencies
+    behaviors = set()
+    monitors  = set()
     for i in uavs:
-        uav  = uavs[i]
-        deps = deps.union(uav.behaviors())
+        uav       = uavs[i]
+        behaviors = behaviors.union(uav.behaviors())
+        monitors  = monitors.union(uav.monitors())
 
-    return deps
+    return (behaviors, monitors)
 
 
 if __name__ == "__main__":
@@ -576,9 +617,10 @@ if __name__ == "__main__":
     output = get_spec_file()
 
     # determine which monitors will be required by the scenario
-    deps = scenario_deps(output)
+    behaviors, monitors = scenario_deps(output)
 
-    print [ str(x) for x in deps ]
+    print [ str(x) for x in behaviors ]
+    print [ str(x) for x in monitors ]
 
     sys.exit()
 
