@@ -4,6 +4,7 @@ import inspect
 import shutil
 import sys
 import datetime
+import itertools
 
 import xml.dom.minidom as MD
 
@@ -14,12 +15,15 @@ def make_node(doc, tag, attrs={}, children=[]):
     node = doc.createElement(tag)
 
     for key in attrs:
-        node.setAttribute(key, attrs[key])
+        node.setAttribute(key, str(attrs[key]))
 
     for child in children:
         node.childNodes.append(child)
 
     return node
+
+def simple_node(doc, tag, txt):
+    return make_node(doc, tag, {}, [ doc.createTextNode(str(txt)) ])
 
 
 # Scenario Specification ######################################################
@@ -52,7 +56,7 @@ class Scenario(object):
                         uavs[play.uav - 1].addPlay(play)
                         continue
 
-                    print ('Unknown command: %s' % x[0])
+                    # print ('Unknown command: %s' % x[0])
 
         return Scenario('Test Scenario', locs, uavs)
 
@@ -75,12 +79,11 @@ class Scenario(object):
         return (behaviors, monitors)
 
     def genXML(self):
-        doc = MD.Document()
-
-        root = doc.createElement('AMASE')
-        root.childNodes.append(self.genScenarioData(doc))
-        root.childNodes.append(self.genEventList(doc))
-        doc.childNodes.append(root)
+        doc  = MD.Document()
+        doc.childNodes.append(make_node(doc, 'AMASE', {}, [
+            self.genScenarioData(doc),
+            self.genEventList(doc)
+            ]))
 
         return doc
 
@@ -91,25 +94,23 @@ class Scenario(object):
 
         return make_node(doc, 'ScenarioData', {}, [
             make_node(doc, 'SimulationView', {
-                'LongExtend': '0.7',
-                'Latitude': str(maplat),
-                'Longitude': str(maplon),
+                'LongExtend': 0.7,
+                'Latitude': maplat,
+                'Longitude': maplon,
                 }, []),
-            make_node(doc, 'ScenarioName', {}, [
-                doc.createTextNode(self.name),
-                ]),
-            make_node(doc, 'Date', {}, [
-                doc.createTextNode('%d/%d/%d:%d:%d:%d' % (now.day,now.month,now.year,
+            simple_node(doc, 'ScenarioName', self.name),
+            simple_node(doc, 'Date',
+                '%d/%d/%d:%d:%d:%d' % (now.day,now.month,now.year,
                         now.hour,now.minute,now.second)),
-                ]),
-            make_node(doc, 'Duration', {}, [
-                doc.createTextNode(str(self.duration)),
-                ]),
+            simple_node(doc, 'Duration',
+                str(self.duration)),
             ])
 
     def genEventList(self, doc):
-        return make_node(doc, 'ScenarioEventList', {},
-                map(lambda uav: uav.genXML(doc), self.uavs))
+        uavNodes    = list(itertools.chain(*map(lambda uav: uav.genXML(doc), self.uavs)))
+        searchNodes = map(lambda loc: loc.genXML(doc), self.locs)
+
+        return make_node(doc, 'ScenarioEventList', {}, uavNodes + searchNodes)
 
 
 # Locations ###################################################################
@@ -124,6 +125,42 @@ class Location(object):
 
     def __str__(self):
         return ('L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height))
+
+    def genXML(self, doc):
+        return make_node(doc, 'AreaSearchTask', {'Series':'CMASI'}, [
+            make_node(doc, 'SearchArea', {}, [
+                Location._rectangle(doc, self.lat, self.lon, self.width,
+                    self.height),
+                ]),
+            make_node(doc, 'ViewAngleList', {}, []),
+            make_node(doc, 'DesiredWaveLengthBands', {}, []),
+            simple_node(doc, 'DwellTime', 0),
+            simple_node(doc, 'GroundSampleDistance', 0.0),
+            simple_node(doc, 'TaskId', 10 + self.num),
+            make_node(doc, 'Label', {}, []),
+            simple_node(doc, 'RevisitRate', 0.0),
+            make_node(doc, 'Parameters', {}, []),
+            simple_node(doc, 'Priority', 0),
+            simple_node(doc, 'Required', 'false'),
+            ])
+
+    @staticmethod
+    def _rectangle(doc, lat, lon, width, height):
+        return make_node(doc, 'Rectangle', {'Series':'CMASI'}, [
+            Location._center_point(doc, lat, lon),
+            simple_node(doc, 'Width', width),
+            simple_node(doc, 'Height', height),
+            simple_node(doc, 'Rotation', 0.0),
+            ])
+
+    @staticmethod
+    def _center_point(doc, lat, lon):
+        return make_node(doc, 'CenterPoint', {'Series':'CMASI'}, [
+            make_node(doc, 'Location3D', {'Series':'CMASI'}, [
+                simple_node(doc, 'Latitude', lat),
+                simple_node(doc, 'Longitude', lon),
+                ])
+            ])
 
 
 # UAVs ########################################################################
@@ -165,13 +202,81 @@ class UAV(object):
         return deps
 
     def genXML(self,doc):
+        return [ self.genXMLConfig(doc), self.genXMLState(doc) ]
+
+    def genXMLConfig(self,doc):
+        """Generate air-vehicle configuration for this UAV"""
         return make_node(doc, 'AirVehicleConfiguration', {
-                'Time': '0.0',
+                'Time': 0.0,
                 'Series': 'CMASI',
             }, [
-                make_node(doc, 'ID', {}, [
-                    doc.createTextNode(str(self.num)),
+                simple_node(doc, 'ID', self.num),
+                simple_node(doc, 'Label', 'UAV-' + str(self.num)),
+                simple_node(doc, 'MinimumSpeed', 15.0),
+                simple_node(doc, 'MaximumSpeed', 15.0),
+                make_node(doc, 'NomninalFlightProfile', {}, [
+                    UAV._flight_profile(doc, 'Cruise', 20.0, 0.0, 0.0)]),
+                make_node(doc, 'AlternateFlightProfiles', {}, [
+                    UAV._flight_profile(doc, 'Climb', 15.0, 10.0, 5.0),
+                    UAV._flight_profile(doc, 'Descent', 25.0, -5.0, -5.0),
+                    UAV._flight_profile(doc, 'Loiter', 20.0, 5.0, 0.0),
+                    UAV._flight_profile(doc, 'Dash', 35.0, -2.0, 0.0),
                     ]),
+                make_node(doc, 'AvailableTurnTypes', {}, [
+                    simple_node(doc, 'TurnType', 'TurnShort'),
+                    simple_node(doc, 'TurnType', 'FlyOver'),
+                    ]),
+                simple_node(doc, 'MinimumAltitude', 0.0),
+                simple_node(doc, 'MaximumAltitude', 1000000.0),
+                simple_node(doc, 'MinAltAboveGround', 0.0),
+            ])
+
+    @staticmethod
+    def _flight_profile(doc, name, airspeed, pitchAngle, verticalSpeed,):
+        return make_node(doc, 'FlightProfile', {'Series': 'CMASI'}, [
+            simple_node(doc, 'Name', name),
+            simple_node(doc, 'Airspeed', airspeed),
+            simple_node(doc, 'PitchAngle', pitchAngle),
+            simple_node(doc, 'VerticalSpeed', verticalSpeed),
+            simple_node(doc, 'MaxBankAngle', 30.0),
+            simple_node(doc, 'EnergyRate', 0.005),
+            ])
+
+    def genXMLState(self, doc):
+        return make_node(doc, 'AirVehicleState', {
+            'Time': '0.0',
+            'Series': 'CMASI',
+            }, [
+            simple_node(doc, 'ID', self.num),
+            make_node(doc, 'Location', {}, [
+                make_node(doc, 'Location3D', {'Series': 'CMASI'}, [
+                    simple_node(doc, 'Altitude', 50.0),
+                    simple_node(doc, 'Latitude', self.lat),
+                    simple_node(doc, 'Longitude', self.lon),
+                    ]),
+                ]),
+            simple_node(doc, 'u', 0.0),
+            simple_node(doc, 'v', 0.0),
+            simple_node(doc, 'w', 0.0),
+            simple_node(doc, 'udot', 0.0),
+            simple_node(doc, 'vdot', 0.0),
+            simple_node(doc, 'wdot', 0.0),
+            simple_node(doc, 'Heading', 90.0),
+            simple_node(doc, 'Pitch', 0.0),
+            simple_node(doc, 'Roll', 0.0),
+            simple_node(doc, 'Airspeed', 0.0),
+            simple_node(doc, 'VerticalSpeed', 0.0),
+            simple_node(doc, 'ActualEnergyRate', 0.00008),
+            simple_node(doc, 'EnergyAvailable', 100.0),
+            simple_node(doc, 'Windspeed', 0.0),
+            simple_node(doc, 'WindDirection', 0.0),
+            simple_node(doc, 'GroundSpeed', 0.0),
+            simple_node(doc, 'GroundTrack', 0.0),
+            simple_node(doc, 'CurrentWaypoint', 0),
+            simple_node(doc, 'CurrentCommand', 0),
+            simple_node(doc, 'Mode', 'Waypoint'),
+            make_node(doc, 'AssociatedTasks', {}, []),
+            simple_node(doc, 'Time', 0.0),
             ])
 
 
@@ -306,152 +411,6 @@ def get_args(func):
     args = inspect.getargspec(func).args
     args = [arg for arg in args if arg != 'self']
     return args
-
-def make_xml(n_uav,uav_lat,uav_lon,n_loc,loc_lat,loc_lon,width,height):
-
-    maplat = sum(uav_lat)/float(len(uav_lat))
-    maplon = sum(uav_lon)/float(len(uav_lon))
-
-    xmlscript = ('<?xml version="1.0" ?>\n'
-    '<AMASE>\n'
-      '<ScenarioData>\n'
-        '<SimulationView LongExtent=".07" Latitude="{lat}" Longitude="{lon}"/>\n'
-        '<ScenarioName>Test Scenario</ScenarioName>\n'
-        '<Date>24/04/2008:00:00:00</Date>\n'
-        '<ScenarioDuration>60000</ScenarioDuration>\n'
-      '</ScenarioData>\n'
-      '<ScenarioEventList>\n').format(lat = maplat, lon = maplon)
-
-    for i in range(0,n_uav):
-
-        xmlscript += ('<AirVehicleConfiguration Time="0.0" Series="CMASI">\n'
-          '<ID>{id}</ID>\n'
-          '<Label>UAV{id}</Label>\n'
-          '<MinimumSpeed>15.0</MinimumSpeed>\n'
-          '<MaximumSpeed>35.0</MaximumSpeed>\n'
-          '<NominalFlightProfile>\n'
-           ' <FlightProfile Series="CMASI">\n'
-            '  <Name>Cruise</Name>\n'
-             ' <Airspeed>20.0</Airspeed>\n'
-              '<PitchAngle>0.0</PitchAngle>\n'
-              '<VerticalSpeed>0.0</VerticalSpeed>\n'
-              '<MaxBankAngle>30.0</MaxBankAngle>\n'
-              '<EnergyRate>0.005</EnergyRate>\n'
-            '</FlightProfile>\n'
-          '</NominalFlightProfile>\n'
-          '<AlternateFlightProfiles>\n'
-            '<FlightProfile Series="CMASI">\n'
-              '<Name>Climb</Name>\n'
-              '<Airspeed>15.0</Airspeed>\n'
-              '<PitchAngle>10.0</PitchAngle>\n'
-              '<VerticalSpeed>5.0</VerticalSpeed>\n'
-              '<MaxBankAngle>30.0</MaxBankAngle>\n'
-              '<EnergyRate>0.01</EnergyRate>\n'
-            '</FlightProfile>\n'
-            '<FlightProfile Series="CMASI">\n'
-              '<Name>Descent</Name>\n'
-              '<Airspeed>25.0</Airspeed>\n'
-              '<PitchAngle>-5.0</PitchAngle>\n'
-              '<VerticalSpeed>-5.0</VerticalSpeed>\n'
-              '<MaxBankAngle>30.0</MaxBankAngle>\n'
-              '<EnergyRate>0.005</EnergyRate>\n'
-            '</FlightProfile>\n'
-            '<FlightProfile Series="CMASI">\n'
-              '<Name>Loiter</Name>\n'
-              '<Airspeed>20.0</Airspeed>\n'
-              '<PitchAngle>5.0</PitchAngle>\n'
-              '<VerticalSpeed>0.0</VerticalSpeed>\n'
-              '<MaxBankAngle>30.0</MaxBankAngle>\n'
-              '<EnergyRate>0.005</EnergyRate>\n'
-            '</FlightProfile>\n'
-            '<FlightProfile Series="CMASI">\n'
-              '<Name>Dash</Name>\n'
-              '<Airspeed>35.0</Airspeed>\n'
-              '<PitchAngle>-2.0</PitchAngle>\n'
-              '<VerticalSpeed>0.0</VerticalSpeed>\n'
-              '<MaxBankAngle>30.0</MaxBankAngle>\n'
-              '<EnergyRate>0.01</EnergyRate>\n'
-            '</FlightProfile>\n'
-          '</AlternateFlightProfiles>\n'
-          '<AvailableTurnTypes>\n'
-            '<TurnType>TurnShort</TurnType>\n'
-            '<TurnType>FlyOver</TurnType>\n'
-          '</AvailableTurnTypes>\n'
-          '<MinimumAltitude>0.0</MinimumAltitude>\n'
-          '<MaximumAltitude>1000000.0</MaximumAltitude>\n'
-          '<MinAltAboveGround>0.0</MinAltAboveGround>\n'
-        '</AirVehicleConfiguration>\n'
-        '<AirVehicleState Time="0.0" Series="CMASI">\n'
-          '<ID>{id}</ID>\n'
-          '<Location>\n'
-            '<Location3D Series="CMASI">\n'
-              '<Altitude>50.0</Altitude>\n'
-              '<Latitude>{lat}</Latitude>\n'
-              '<Longitude>{lon}</Longitude>\n'
-            '</Location3D>\n'
-          '</Location>\n'
-          '<u>0.0</u>\n'
-          '<v>0.0</v>\n'
-          '<w>0.0</w>\n'
-          '<udot>0.0</udot>\n'
-          '<vdot>0.0</vdot>\n'
-          '<wdot>0.0</wdot>\n'
-          '<Heading>90.0</Heading>\n'
-          '<Pitch>0.0</Pitch>\n'
-          '<Roll>0.0</Roll>\n'
-          '<p>0.0</p>\n'
-          '<q>0.0</q>\n'
-          '<r>0.0</r>\n'
-          '<Airspeed>0.0</Airspeed>\n'
-          '<VerticalSpeed>0.0</VerticalSpeed>\n'
-          '<ActualEnergyRate>0.00008</ActualEnergyRate>\n'
-          '<EnergyAvailable>100.0</EnergyAvailable>\n'
-          '<WindSpeed>0.0</WindSpeed>\n'
-          '<WindDirection>0.0</WindDirection>\n'
-          '<GroundSpeed>0.0</GroundSpeed>\n'
-          '<GroundTrack>0.0</GroundTrack>\n'
-          '<CurrentWaypoint>0</CurrentWaypoint>\n'
-          '<CurrentCommand>0</CurrentCommand>\n'
-          '<Mode>Waypoint</Mode>\n'
-          '<AssociatedTasks/>\n'
-          '<Time>0</Time>\n'
-        '</AirVehicleState>\n').format(id=i+1,lat=uav_lat[i],lon=uav_lon[i])
-
-    for i in range(0,n_loc):
-
-        xmlscript +=('<AreaSearchTask Series="CMASI">\n'
-          '<SearchArea>\n'
-        '<Rectangle Series="CMASI">\n'
-          '<CenterPoint>\n'
-            '<Location3D Series="CMASI">\n'
-              '<Latitude>{lat}</Latitude>\n'
-             ' <Longitude>{lon}</Longitude>\n'
-            '</Location3D>\n'
-          '</CenterPoint>\n'
-          '<Width>{width}</Width>\n'
-          '<Height>{height}</Height>\n'
-          '<Rotation>0.0</Rotation>\n'
-        '</Rectangle>\n'
-      '</SearchArea>\n'
-        '<ViewAngleList/>\n'
-        '<DesiredWavelengthBands/>\n'
-        '<DwellTime>0</DwellTime>\n'
-        '<GroundSampleDistance>0.0</GroundSampleDistance>\n'
-        '<TaskID>{taskid}</TaskID>\n'
-        '<Label/>\n'
-        '<RevisitRate>0.0</RevisitRate>\n'
-        '<Parameters/>\n'
-        '<Priority>0</Priority>\n'
-        '<Required>false</Required>\n'
-      '</AreaSearchTask>\n').format(lat=loc_lat[i],lon=loc_lon[i],width=width[i]\
-      ,height=height[i],taskid = 10 + i)
-
-    xmlscript +=('</ScenarioEventList>\n'
-      '</AMASE>\n').format()
-
-    text_file = open("../auto_generated/auto_code.xml", "w+")
-    text_file.write("%s" % xmlscript)
-    text_file.close()
 
 
 def make_script(n_uav, n_loc, height, width, loc_lon, loc_lat,ctrl_input):
@@ -688,11 +647,9 @@ if __name__ == "__main__":
     # determine which monitors will be required by the scenario
     behaviors, monitors = spec.dependencies()
 
-    print [ str(x) for x in behaviors ]
-    print [ str(x) for x in monitors ]
-
-    print spec.genXML().writexml(sys.stdout, '', '  ', '\n')
-    print ""
+    # Write out the XML for AMASE
+    with open('../auto_generated/auto_code.xml', 'w') as xml:
+        spec.genXML().writexml(xml, '', '  ', '\n')
 
     sys.exit()
 
