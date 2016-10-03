@@ -3,11 +3,30 @@ import subprocess
 import inspect
 import shutil
 import sys
+import datetime
+
+import xml.dom.minidom as MD
+
+
+# XML Helpers #################################################################
+
+def make_node(doc, tag, attrs={}, children=[]):
+    node = doc.createElement(tag)
+
+    for key in attrs:
+        node.setAttribute(key, attrs[key])
+
+    for child in children:
+        node.childNodes.append(child)
+
+    return node
 
 
 # Scenario Specification ######################################################
 
-class Scenario():
+class Scenario(object):
+    __slots__ = [ 'locs', 'uavs', 'name', 'duration' ]
+
     @staticmethod
     def parse(file):
         """Parse the spec file, and produce a scenario"""
@@ -35,12 +54,14 @@ class Scenario():
 
                     print ('Unknown command: %s' % x[0])
 
-        return Scenario(locs, uavs)
+        return Scenario('Test Scenario', locs, uavs)
 
 
-    def __init__(self, locs, uavs):
+    def __init__(self, name, locs, uavs):
+        self.name = name
         self.locs = locs
         self.uavs = uavs
+        self.duration = 60000
 
     def dependencies(self):
         """Produce the behavior and monitor dependencies for this scenario"""
@@ -53,12 +74,47 @@ class Scenario():
 
         return (behaviors, monitors)
 
+    def genXML(self):
+        doc = MD.Document()
 
+        root = doc.createElement('AMASE')
+        root.childNodes.append(self.genScenarioData(doc))
+        root.childNodes.append(self.genEventList(doc))
+        doc.childNodes.append(root)
+
+        return doc
+
+    def genScenarioData(self, doc):
+        maplat = sum([ loc.lat for loc in self.locs ])/float(len(self.locs))
+        maplon = sum([ loc.lon for loc in self.locs ])/float(len(self.locs))
+        now    = datetime.datetime.now()
+
+        return make_node(doc, 'ScenarioData', {}, [
+            make_node(doc, 'SimulationView', {
+                'LongExtend': '0.7',
+                'Latitude': str(maplat),
+                'Longitude': str(maplon),
+                }, []),
+            make_node(doc, 'ScenarioName', {}, [
+                doc.createTextNode(self.name),
+                ]),
+            make_node(doc, 'Date', {}, [
+                doc.createTextNode('%d/%d/%d:%d:%d:%d' % (now.day,now.month,now.year,
+                        now.hour,now.minute,now.second)),
+                ]),
+            make_node(doc, 'Duration', {}, [
+                doc.createTextNode(str(self.duration)),
+                ]),
+            ])
+
+    def genEventList(self, doc):
+        return make_node(doc, 'ScenarioEventList', {},
+                map(lambda uav: uav.genXML(doc), self.uavs))
 
 
 # Locations ###################################################################
 
-class Location():
+class Location(object):
     def __init__(self, num, lat, lon, width, height):
         self.num    = num
         self.lat    = lat
@@ -72,7 +128,7 @@ class Location():
 
 # UAVs ########################################################################
 
-class UAV():
+class UAV(object):
     def __init__(self, num, lat, lon):
         self.num   = num
         self.lat   = lat
@@ -108,10 +164,20 @@ class UAV():
 
         return deps
 
+    def genXML(self,doc):
+        return make_node(doc, 'AirVehicleConfiguration', {
+                'Time': '0.0',
+                'Series': 'CMASI',
+            }, [
+                make_node(doc, 'ID', {}, [
+                    doc.createTextNode(str(self.num)),
+                    ]),
+            ])
+
 
 # Monitors ####################################################################
 
-class Monitor():
+class Monitor(object):
     pass
 
 class FuelMonitor(Monitor):
@@ -132,7 +198,7 @@ class FoundMonitor(Monitor):
 
 # Behaviors ###################################################################
 
-class Behavior():
+class Behavior(object):
     def __init__(self, uav, uav2, loc):
         self.uav  = int(uav)
         self.uav2 = int(uav2)
@@ -173,7 +239,7 @@ class TrackBehavior(Behavior):
 
 # Plays #######################################################################
 
-class Play():
+class Play(object):
     @staticmethod
     def make(descr):
         if descr[2] == 'Loiter':
@@ -624,6 +690,9 @@ if __name__ == "__main__":
 
     print [ str(x) for x in behaviors ]
     print [ str(x) for x in monitors ]
+
+    print spec.genXML().writexml(sys.stdout, '', '  ', '\n')
+    print ""
 
     sys.exit()
 
