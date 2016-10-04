@@ -9,6 +9,90 @@ import itertools
 import xml.dom.minidom as MD
 
 
+# Pretty-printing #############################################################
+
+class Pretty(object):
+
+    __slots__ = [ 'file', 'level' ]
+
+    def __init__(self, file=sys.stdout, level=0):
+        self.file = file
+        self.level = level
+
+    def indent(self, txt=None):
+        return Indent(self, txt)
+
+    def parens(self):
+        return Parens(self)
+
+    def write(self, x):
+        self.file.write(str(x))
+
+    def writeln(self, x):
+        self.file.write(x)
+        self.newline()
+
+    def newline(self):
+        self.file.write('\n')
+        self.file.write(' ' * self.level)
+
+    def sep(self, sep, things):
+        if len(things) <= 0:
+            return
+
+        self.write(things[0])
+
+        for thing in things[1:]:
+            self.write(sep)
+            self.write(thing)
+
+    def comment(self, txt):
+        self.write('# ')
+        self.writeln(txt)
+
+    def define(self, name, *params):
+        self.write('def ')
+        self.write(name)
+
+        with self.parens():
+            self.sep(', ', params)
+
+        self.write(':')
+
+        return self.indent()
+
+class Indent(object):
+    def __init__(self, parent, txt=None):
+        self.parent = parent
+        self.txt = txt
+
+    def __enter__(self):
+        if self.txt != None:
+            self.parent.write(self.txt)
+
+        self.parent.level += 4
+
+        if self.txt != None:
+            self.parent.newline()
+
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.parent.level -= 4
+        self.parent.newline()
+
+class Parens(object):
+    def __init__(self, parent):
+        self.parent = parent
+
+    def __enter__(self):
+        self.parent.write('(')
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.parent.write(')')
+
+
 # XML Helpers #################################################################
 
 def make_node(doc, tag, attrs={}, children=[]):
@@ -78,16 +162,16 @@ class Scenario(object):
 
         return (behaviors, monitors)
 
-    def genXML(self):
+    def gen_xml(self):
         doc  = MD.Document()
         doc.childNodes.append(make_node(doc, 'AMASE', {}, [
-            self.genScenarioData(doc),
-            self.genEventList(doc)
+            self._gen_scenario_data(doc),
+            self._gen_event_list(doc)
             ]))
 
         return doc
 
-    def genScenarioData(self, doc):
+    def _gen_scenario_data(self, doc):
         maplat = sum([ loc.lat for loc in self.locs ])/float(len(self.locs))
         maplon = sum([ loc.lon for loc in self.locs ])/float(len(self.locs))
         now    = datetime.datetime.now()
@@ -106,11 +190,66 @@ class Scenario(object):
                 str(self.duration)),
             ])
 
-    def genEventList(self, doc):
-        uavNodes    = list(itertools.chain(*map(lambda uav: uav.genXML(doc), self.uavs)))
-        searchNodes = map(lambda loc: loc.genXML(doc), self.locs)
+    def _gen_event_list(self, doc):
+        uavNodes    = list(itertools.chain(*map(lambda uav: uav.gen_xml(doc), self.uavs)))
+        searchNodes = map(lambda loc: loc.gen_xml(doc), self.locs)
 
         return make_node(doc, 'ScenarioEventList', {}, uavNodes + searchNodes)
+
+    def gen_script(self, file=sys.stdout):
+        pp = Pretty(file)
+
+        behaviors, monitors = self.dependencies()
+
+        map(pp.writeln, [
+            'import socket',
+            'from geopy.distance import vincenty',
+            'from lmcp import LMCPFactory',
+            'from afrl.cmasi import EntityState',
+            'from afrl.cmasi import AirVehicleState',
+            'from afrl.cmasi import AirVehicleConfiguration',
+            'from afrl.cmasi.SessionStatus import SessionStatus',
+            'from demo_controller import ExampleCtrl',
+            'from PyMASE import UAV, Location, get_args',
+            'import string',
+            ])
+
+        pp.newline()
+
+        with pp.define('prepare_ctrl_input', 'uavs', 'ctrl_input_args', 'current_plays'):
+            pp.newline()
+            pp.writeln('pass')
+
+        with pp.define('message_received', 'obj'):
+            pp.newline()
+            with pp.indent('if isinstance(obj, AirVehicleConfiguration.AirVehicleConfiguration):'):
+                pp.writeln('configMap[obj.get_ID()] = obj')
+
+            with pp.indent('elif isinstance(obj, AirVehicleState.AriVehicleState):'):
+                pp.writeln('stateMap[obj.get_ID()] = obj')
+
+            with pp.indent('elif isinstance(obj, SessionState):'):
+                pp.writeln('ss = obj')
+
+
+        with pp.define('connect'):
+            pp.newline()
+            pp.writeln('sock = socket.server(socket.AF_INET, socket.SOCK_STREAM)')
+            pp.writeln('server_address = ("localhost", 5555)')
+            pp.writeln('print("connecting to %s port %s" % server_address)')
+            pp.writeln('sock.connect(server_address)')
+            pp.writeln('print("connected")')
+            pp.writeln('return sock')
+
+        pp.writeln('sock = connect()')
+        pp.writeln('msg = LMCPFactory.LMCPFactory()')
+        pp.newline()
+
+        with pp.indent('try:'):
+            with pp.indent('while True:'):
+                pp.writeln('message = msg.getObject(sock.recv(2224))')
+                pp.newline()
+                pp.writeln('message_received(message)')
 
 
 # Locations ###################################################################
@@ -126,7 +265,7 @@ class Location(object):
     def __str__(self):
         return ('L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height))
 
-    def genXML(self, doc):
+    def gen_xml(self, doc):
         return make_node(doc, 'AreaSearchTask', {'Series':'CMASI'}, [
             make_node(doc, 'SearchArea', {}, [
                 Location._rectangle(doc, self.lat, self.lon, self.width,
@@ -201,10 +340,10 @@ class UAV(object):
 
         return deps
 
-    def genXML(self,doc):
-        return [ self.genXMLConfig(doc), self.genXMLState(doc) ]
+    def gen_xml(self,doc):
+        return [ self.gen_xml_config(doc), self.gen_xml_state(doc) ]
 
-    def genXMLConfig(self,doc):
+    def gen_xml_config(self,doc):
         """Generate air-vehicle configuration for this UAV"""
         return make_node(doc, 'AirVehicleConfiguration', {
                 'Time': 0.0,
@@ -242,7 +381,7 @@ class UAV(object):
             simple_node(doc, 'EnergyRate', 0.005),
             ])
 
-    def genXMLState(self, doc):
+    def gen_xml_state(self, doc):
         return make_node(doc, 'AirVehicleState', {
             'Time': '0.0',
             'Series': 'CMASI',
@@ -649,7 +788,12 @@ if __name__ == "__main__":
 
     # Write out the XML for AMASE
     with open('../auto_generated/auto_code.xml', 'w') as xml:
-        spec.genXML().writexml(xml, '', '  ', '\n')
+        spec.gen_xml().writexml(xml, '', '  ', '\n')
+
+    # Write out the outer loop controller for the scenario
+    # with open('../auto_generated/auto_code.py', 'w') as script:
+    #     spec.gen_script(script)
+    spec.gen_script(sys.stdout)
 
     sys.exit()
 
