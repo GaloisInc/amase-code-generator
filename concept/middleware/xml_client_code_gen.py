@@ -51,6 +51,7 @@ class Pretty(object):
         self.writeln(txt)
 
     def define(self, name, *params):
+        self.newline()
         self.write('def ')
         self.write(name)
 
@@ -59,22 +60,23 @@ class Pretty(object):
 
         self.write(':')
 
-        return self.indent()
+        indented = self.indent()
+        self.newline()
+
+        return indented
 
 class Indent(object):
     def __init__(self, parent, txt=None):
         self.parent = parent
-        self.txt = txt
+        if txt != None:
+            parent.write(txt)
+
+        parent.level += 4
+
+        if txt != None:
+            parent.newline()
 
     def __enter__(self):
-        if self.txt != None:
-            self.parent.write(self.txt)
-
-        self.parent.level += 4
-
-        if self.txt != None:
-            self.parent.newline()
-
         return self
 
     def __exit__(self, type, value, traceback):
@@ -199,7 +201,6 @@ class Scenario(object):
     def gen_script(self, file=sys.stdout):
         pp = Pretty(file)
 
-        behaviors, monitors = self.dependencies()
 
         map(pp.writeln, [
             'import socket',
@@ -214,26 +215,40 @@ class Scenario(object):
             'import string',
             ])
 
-        pp.newline()
-
         with pp.define('prepare_ctrl_input', 'uavs', 'ctrl_input_args', 'current_plays'):
-            pp.newline()
-            pp.writeln('pass')
+            pp.writeln('ctrl_input = dict()')
 
-        with pp.define('message_received', 'obj'):
-            pp.newline()
+            behaviors, monitors = self.dependencies()
+
+            # update each monitor
+            for monitor in monitors:
+                pp.write('ctrl_input["')
+                pp.write(str(monitor))
+                pp.write('"] = UAVs[')
+                pp.write(str(monitor.uav))
+                pp.write('].')
+                pp.writeln(monitor.amase_parameter())
+
+            # update the current play for each 
+
+            pp.write('return ctrl_input')
+
+
+        # When a message is received, do one of the following:
+        with pp.define('message_received', 'obj', 'configMap', 'stateMap'):
+
             with pp.indent('if isinstance(obj, AirVehicleConfiguration.AirVehicleConfiguration):'):
                 pp.writeln('configMap[obj.get_ID()] = obj')
 
             with pp.indent('elif isinstance(obj, AirVehicleState.AriVehicleState):'):
                 pp.writeln('stateMap[obj.get_ID()] = obj')
 
-            with pp.indent('elif isinstance(obj, SessionState):'):
-                pp.writeln('ss = obj')
-
+            # This line was in the original code generator, though the `ss`
+            # variable is never referenced anywhere else.
+            # with pp.indent('elif isinstance(obj, SessionState):'):
+            #     pp.writeln('ss = obj')
 
         with pp.define('connect'):
-            pp.newline()
             pp.writeln('sock = socket.server(socket.AF_INET, socket.SOCK_STREAM)')
             pp.writeln('server_address = ("localhost", 5555)')
             pp.writeln('print("connecting to %s port %s" % server_address)')
@@ -250,6 +265,22 @@ class Scenario(object):
                 pp.writeln('message = msg.getObject(sock.recv(2224))')
                 pp.newline()
                 pp.writeln('message_received(message)')
+
+                # this shouldn't be necessary, as each UAV is set to reference
+                # the stateMap at startup. Maybe the stateMap just isn't being
+                # updated correctly in message_received?
+                with pp.indent('for i in range(0, uav_n):'):
+                    pp.writeln('UAVs[i].stateMap = stateMap')
+
+                # We should already know the signature of the controller at this
+                # point, so we can just call it directly.
+
+                pp.newline()
+                pp.writeln('output = M1.move(ctrl_input)')
+
+        with pp.indent('finally:'):
+            pp.writeln('print("closing socket")')
+            pp.writeln('sock.close()')
 
 
 # Locations ###################################################################
@@ -422,7 +453,11 @@ class UAV(object):
 # Monitors ####################################################################
 
 class Monitor(object):
-    pass
+    def amase_parameter(self):
+        """
+        Returns the name of the UAV parameter that is queried for this monitor
+        """
+        pass
 
 class FuelMonitor(Monitor):
     def __init__(self, uav):
@@ -431,6 +466,9 @@ class FuelMonitor(Monitor):
     def __str__(self):
         return ('M_%d_Fuel_0_0' % self.uav)
 
+    def amase_parameter(self):
+        return 'Fuel'
+
 class FoundMonitor(Monitor):
     def __init__(self, uav, target):
         self.uav = uav
@@ -438,6 +476,9 @@ class FoundMonitor(Monitor):
 
     def __str__(self):
         return ('M_%d_Found_%d_0' % (self.uav, self.target))
+
+    def amase_parameter(self):
+        return 'Found'
 
 
 # Behaviors ###################################################################
@@ -504,13 +545,14 @@ class Play(object):
 class STPlay(Play):
     """Search and track for the spescified uav, in the region provided.  """
 
-    def __init__(self, uav, target, loc):
+    def __init__(self, uav, loc, target):
+        print(uav, loc, target)
         self.uav    = int(uav)
         self.target = int(target)
-        self.loc    = loc
+        self.loc    = int(loc)
 
     def __str__(self):
-        return ('P_%s_ST_%s_%s' % (self.uav, self.target, self.loc))
+        return ('P_%d_ST_%d_%d' % (self.uav, self.loc, self.target))
 
     def behaviors(self):
         return set([
