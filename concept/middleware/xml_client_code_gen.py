@@ -269,6 +269,17 @@ class Scenario(object):
             pp.writeln('print("connected")')
             pp.writeln('return sock')
 
+
+        # Write out behavior skeletons
+        for behavior in behaviors:
+            pp.newline()
+            behavior.amase_behavior_def(pp)
+
+        # Write out each monitor
+        for monitor in monitors:
+            pp.newline()
+            monitor.amase_monitor_def(pp)
+
         pp.newline()
         pp.writeln('sock = connect()')
         pp.writeln('msg = LMCPFactory.LMCPFactory()')
@@ -536,6 +547,12 @@ class Monitor(object):
         return '%s_monitor(%s, %d, %d)' % (self.amase_parameter(), str(arg),
                 self.uav, self.loc)
 
+    def amase_monitor_def(self, pp):
+        """
+        Returns the definition of this monitor for Amase.
+        """
+        pass
+
 class FuelMonitor(Monitor):
     def __init__(self, uav):
         self.uav = uav
@@ -548,6 +565,19 @@ class FuelMonitor(Monitor):
     def amase_parameter(self):
         return 'Fuel'
 
+    def amase_monitor_def(self, pp):
+        with pp.define('Fuel_monitor', 'uav', 'uav2', 'loc'):
+            pp.writeln('fuel = uav.get_energy()')
+            with pp.indent('if fuel <= 90 and fuel != 0:'):
+                pp.write('uav.Fuel = 1')
+
+            pp.newline()
+            with pp.indent('elif fuel > 90:'):
+                pp.write('uav.Fuel = 0')
+
+            pp.newline()
+            pp.writeln('return uav')
+
 class FoundMonitor(Monitor):
     def __init__(self, uav, target):
         self.uav = uav
@@ -559,6 +589,21 @@ class FoundMonitor(Monitor):
 
     def amase_parameter(self):
         return 'Found'
+
+    def amase_monitor_def(self, pp):
+        with pp.define('Found_monitor', 'uav', 'uav2', 'loc'):
+            pp.writeln('dist = vincenty((uav.getit("latitude",uav.id),uav.getit("longitude",uav.id))'
+                       ',(uav.getit("latitude",uav2+1),uav.getit("longitude",uav2+1))).meters')
+            with pp.indent('if dist < 600 and dist != 0:'):
+                pp.write('uav.Found = 1')
+
+            pp.newline()
+            with pp.indent('else:'):
+                pp.write('uav.Found = 0')
+
+            pp.newline()
+            pp.writeln('return uav')
+
 
 
 # Behaviors ###################################################################
@@ -580,6 +625,14 @@ class Behavior(object):
     def __str__(self):
         return 'B_%d_%s_%d_%d' % (self.uav, self.behavior_name(), self.uav2,
                 self.loc)
+
+    def amase_behavior_def(self, pp):
+        """
+        The skeleton of how to handle this behavior in AMASE
+        """
+        with pp.define(self.behavior_name(), 'uav', 'uav2', 'loc'):
+            pp.comment('TODO: implement behavior')
+            pp.writeln('return 0')
 
 class RefuelBehavior(Behavior):
     """The Refuel behavior"""
