@@ -10,15 +10,15 @@ ifeq ("$(SLUGS)", "")
 	$(error Unable to find slugs)
 endif
 
-../auto_generated/demo_controller.py: DemoController.py
+../auto_generated/demo_controller.py: ExampleCtrl.py
 	mv $< $@
 
-DemoController.py: controller.salt
+ExampleCtrl.py: controller.salt
 	$(SALTY) -s $(SLUGS) -p $<
 
 .PHONY: clean
 clean:
-	$(RM) DemoController.py
+	$(RM) ExampleCtrl.py
 
 print-%:
 	@echo "$* = $($*)"

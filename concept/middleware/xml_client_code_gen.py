@@ -262,7 +262,7 @@ class Scenario(object):
             #     pp.writeln('ss = obj')
 
         with pp.define('connect'):
-            pp.writeln('sock = socket.server(socket.AF_INET, socket.SOCK_STREAM)')
+            pp.writeln('sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)')
             pp.writeln('server_address = ("localhost", 5555)')
             pp.writeln('print("connecting to %s port %s" % server_address)')
             pp.writeln('sock.connect(server_address)')

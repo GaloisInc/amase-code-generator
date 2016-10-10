@@ -1,4 +1,4 @@
-controller DemoController where
+controller ExampleCtrl where
 
 
 -- Fuel monitors are False when the fuel level is OK
