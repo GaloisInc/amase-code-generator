@@ -5,6 +5,7 @@ import shutil
 import sys
 import datetime
 import itertools
+import string
 
 import xml.dom.minidom as MD
 
@@ -81,7 +82,6 @@ class Indent(object):
 
     def __exit__(self, type, value, traceback):
         self.parent.level -= 4
-        self.parent.newline()
 
 class Parens(object):
     def __init__(self, parent):
@@ -153,6 +153,10 @@ class Scenario(object):
         self.uavs = uavs
         self.duration = 60000
 
+    def plays(self):
+        """All active plays in this scenario"""
+        return list(itertools.chain(*map(lambda uav: uav.plays, self.uavs)))
+
     def dependencies(self):
         """Produce the behavior and monitor dependencies for this scenario"""
         behaviors = set()
@@ -201,6 +205,7 @@ class Scenario(object):
     def gen_script(self, file=sys.stdout):
         pp = Pretty(file)
 
+        behaviors, monitors = self.dependencies()
 
         map(pp.writeln, [
             'import socket',
@@ -213,12 +218,13 @@ class Scenario(object):
             'from demo_controller import ExampleCtrl',
             'from PyMASE import UAV, Location, get_args',
             'import string',
+            '',
+            'stateMap = dict()',
+            'configMap = dict()',
             ])
 
         with pp.define('prepare_ctrl_input', 'uavs', 'ctrl_input_args', 'current_plays'):
             pp.writeln('ctrl_input = dict()')
-
-            behaviors, monitors = self.dependencies()
 
             # update each monitor
             for monitor in monitors:
@@ -230,8 +236,13 @@ class Scenario(object):
                 pp.writeln(monitor.amase_parameter())
 
             # update the current play for each 
+            for play in self.plays():
+                # TODO: `current_plays` is never modified, what is it that drives
+                # this input in a running scenario?
+                pp.writeln('ctrl_input["%s"] = "%s" in current_plays' %
+                        (str(play), str(play)))
 
-            pp.write('return ctrl_input')
+            pp.writeln('return ctrl_input')
 
 
         # When a message is received, do one of the following:
@@ -243,8 +254,8 @@ class Scenario(object):
             with pp.indent('elif isinstance(obj, AirVehicleState.AriVehicleState):'):
                 pp.writeln('stateMap[obj.get_ID()] = obj')
 
-            # This line was in the original code generator, though the `ss`
-            # variable is never referenced anywhere else.
+            # TODO: This line was in the original code generator, though the
+            # `ss` variable is never referenced anywhere else.
             # with pp.indent('elif isinstance(obj, SessionState):'):
             #     pp.writeln('ss = obj')
 
@@ -256,13 +267,54 @@ class Scenario(object):
             pp.writeln('print("connected")')
             pp.writeln('return sock')
 
+        pp.newline()
         pp.writeln('sock = connect()')
         pp.writeln('msg = LMCPFactory.LMCPFactory()')
-        pp.newline()
 
+        # Initialize the UAVs
+        pp.newline()
+        pp.comment('Initialize UAVs')
+        with pp.indent('UAVs = ['):
+            for uav in self.uavs:
+                pp.writeln('UAV(%d, sock, stateMap),' % uav.num)
+            pp.writeln(']')
+
+        # Construct an AMASE location for each of our locations
+        pp.newline()
+        pp.comment('Initialize location state')
+        with pp.indent('locations = ['):
+            for loc in self.locs:
+                pp.writeln('Location(%f,%f,%f,%f,"%s"),' % (loc.lat, loc.lon,
+                    loc.height, loc.width, string.ascii_uppercase[loc.num-1]))
+            pp.writeln(']')
+
+        # Consume initialization messages from the socket
+        pp.newline()
+        pp.comment('Initialize UAV state')
+        pp.writeln('flag = False')
+        with pp.indent('while flag:'):
+            pp.writeln('flag = True')
+            pp.writeln('message = msg.getObject(sock.recv(2224))')
+            pp.writeln('message_received(message)')
+            with pp.indent('for uav in UAVs:'):
+                pp.writeln('uav.stateMap = stateMap')
+                with pp.indent('if uav.stateMap.get(uav.id) is None:'):
+                    pp.writeln('flag = False')
+
+        pp.newline()
+        pp.comment('Handle messages')
         with pp.indent('try:'):
             with pp.indent('while True:'):
                 pp.writeln('message = msg.getObject(sock.recv(2224))')
+
+                # update monitors
+                pp.newline()
+                for monitor in monitors:
+                    ix = monitor.uav - 1
+                    pp.writeln('UAVs[%d] = %s' % (ix,
+                        monitor.amase_user_monitor('UAVs[%d]' % ix)))
+
+                # handle a new message
                 pp.newline()
                 pp.writeln('message_received(message)')
 
@@ -272,12 +324,24 @@ class Scenario(object):
                 with pp.indent('for i in range(0, uav_n):'):
                     pp.writeln('UAVs[i].stateMap = stateMap')
 
-                # We should already know the signature of the controller at this
-                # point, so we can just call it directly.
-
+                # at this point, the map `ctrl_input` has members that match the
+                # arguments to the controller, so call it with those as the
+                # input.
                 pp.newline()
-                pp.writeln('output = M1.move(ctrl_input)')
+                pp.writeln('output = M1.move(**ctrl_input)')
 
+                # Update the internal state based on values of output
+                pp.newline()
+                for behavior in behaviors:
+                    with pp.indent('if output["%s"]:' % str(behavior)):
+                        pp.writeln('%s(UAVs[%d],%d,%d)' %
+                                (behavior.behavior_name(),
+                                    behavior.uav,
+                                    behavior.uav2,
+                                    behavior.loc))
+                    pp.newline()
+
+        pp.newline()
         with pp.indent('finally:'):
             pp.writeln('print("closing socket")')
             pp.writeln('sock.close()')
@@ -286,6 +350,8 @@ class Scenario(object):
 # Locations ###################################################################
 
 class Location(object):
+    __slots__ = ['num', 'lat', 'lon', 'width', 'height']
+
     def __init__(self, num, lat, lon, width, height):
         self.num    = num
         self.lat    = lat
@@ -453,15 +519,26 @@ class UAV(object):
 # Monitors ####################################################################
 
 class Monitor(object):
+    __slots__ = ['uav', 'target', 'loc']
+
     def amase_parameter(self):
         """
         Returns the name of the UAV parameter that is queried for this monitor
         """
         pass
 
+    def amase_user_monitor(self, arg):
+        """
+        Returns the invocation of the user-supplied monitor function.
+        """
+        return '%s_monitor(%s, %d, %d)' % (self.amase_parameter(), str(arg),
+                self.uav, self.loc)
+
 class FuelMonitor(Monitor):
     def __init__(self, uav):
         self.uav = uav
+        self.target = 0
+        self.loc = 0
 
     def __str__(self):
         return ('M_%d_Fuel_0_0' % self.uav)
@@ -473,6 +550,7 @@ class FoundMonitor(Monitor):
     def __init__(self, uav, target):
         self.uav = uav
         self.target = target
+        self.loc = 0
 
     def __str__(self):
         return ('M_%d_Found_%d_0' % (self.uav, self.target))
@@ -484,7 +562,7 @@ class FoundMonitor(Monitor):
 # Behaviors ###################################################################
 
 class Behavior(object):
-    def __init__(self, uav, uav2, loc):
+    def __init__(self, uav, loc, uav2):
         self.uav  = int(uav)
         self.uav2 = int(uav2)
         self.loc  = int(loc)
@@ -497,29 +575,33 @@ class Behavior(object):
     def __hash__(self):
         return hash((self.uav, self.uav2, self.loc))
 
+    def __str__(self):
+        return 'B_%d_%s_%d_%d' % (self.uav, self.behavior_name(), self.uav2,
+                self.loc)
+
 class RefuelBehavior(Behavior):
     """The Refuel behavior"""
 
-    def __str__(self):
-        return ('B_%d_Refuel_%d_%d' % (self.uav, self.uav2, self.loc))
+    def behavior_name(self):
+        return 'Refuel'
 
 class LoiterBehavior(Behavior):
     """The Loiter behavior """
 
-    def __str__(self):
-        return ('B_%d_Loiter_%d_%d' % (self.uav, self.uav2, self.loc))
+    def behavior_name(self):
+        return 'Loiter'
 
 class SearchBehavior(Behavior):
     """The Search behavior"""
 
-    def __str__(self):
-        return ('B_%d_Search_%d_%d' % (self.uav, self.uav2, self.loc))
+    def behavior_name(self):
+        return 'Search'
 
 class TrackBehavior(Behavior):
     """The Track behavior"""
 
-    def __str__(self):
-        return ('B_%d_Track_%d_%d' % (self.uav, self.uav2, self.loc))
+    def behavior_name(self):
+        return 'Track'
 
 
 # Plays #######################################################################
@@ -528,7 +610,7 @@ class Play(object):
     @staticmethod
     def make(descr):
         if descr[2] == 'Loiter':
-            return LoiterPlay(descr[1], descr[3])
+            return LoiterPlay(descr[1], descr[3], descr[4])
 
         elif descr[2] == 'ST':
             return STPlay(descr[1], descr[3], descr[4])
@@ -536,23 +618,24 @@ class Play(object):
         else:
             raise RuntimeError('Invalid play: ' + descr[2])
 
+    def __init__(self, uav, target, loc):
+        self.uav    = int(uav)
+        self.target = int(target)
+        self.loc    = int(loc)
+
     def behaviors(self):
         return set()
 
     def monitors(self):
         return set()
 
+    def __str__(self):
+        return 'P_%d_%s_%d_%d' % (self.uav, self.play_name(), self.target,
+                self.loc)
+
+
 class STPlay(Play):
     """Search and track for the spescified uav, in the region provided.  """
-
-    def __init__(self, uav, loc, target):
-        print(uav, loc, target)
-        self.uav    = int(uav)
-        self.target = int(target)
-        self.loc    = int(loc)
-
-    def __str__(self):
-        return ('P_%d_ST_%d_%d' % (self.uav, self.loc, self.target))
 
     def behaviors(self):
         return set([
@@ -563,19 +646,18 @@ class STPlay(Play):
         return set([
             FoundMonitor(self.uav, self.target)])
 
+    def play_name(self):
+        return 'ST'
+
 class LoiterPlay(Play):
     """The Loiter play"""
-
-    def __init__(self, uav, loc):
-        self.uav = int(uav)
-        self.loc = int(loc)
-
-    def __str__(self):
-        return ('P_%s_Loiter_0_0' % self.uav)
 
     def behaviors(self):
         return set([
                 LoiterBehavior(self.uav, 0, self.loc)])
+
+    def play_name(self):
+        return 'Loiter'
 
 
 # Code-gen Support ############################################################
