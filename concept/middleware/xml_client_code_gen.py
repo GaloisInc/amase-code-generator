@@ -504,7 +504,7 @@ class UAV(object):
             simple_node(doc, 'Roll', 0.0),
             simple_node(doc, 'Airspeed', 0.0),
             simple_node(doc, 'VerticalSpeed', 0.0),
-            simple_node(doc, 'ActualEnergyRate', 0.00008),
+            simple_node(doc, 'ActualEnergyRate', '%f' % 0.00008),
             simple_node(doc, 'EnergyAvailable', 100.0),
             simple_node(doc, 'Windspeed', 0.0),
             simple_node(doc, 'WindDirection', 0.0),
@@ -514,7 +514,7 @@ class UAV(object):
             simple_node(doc, 'CurrentCommand', 0),
             simple_node(doc, 'Mode', 'Waypoint'),
             make_node(doc, 'AssociatedTasks', {}, []),
-            simple_node(doc, 'Time', 0.0),
+            simple_node(doc, 'Time', 0),
             ])
 
 
