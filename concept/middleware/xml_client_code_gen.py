@@ -128,12 +128,14 @@ class Scenario(object):
                 x = x.split()
                 if len(x[0]) > 2:
 
+                    # Format: uav <number> <lat> <lon>
                     if x[0] == 'uav':
-                        uavs.append(UAV(int(x[1]), float(x[2]), float(x[3])))
+                        uavs.append(UAV(int(x[1]) - 1, float(x[2]), float(x[3])))
                         continue
 
+                    # Format: loc <number> <lat> <lon> <width> <height>
                     if x[0] == 'loc':
-                        locs.append(Location(int(x[1]), float(x[2]),
+                        locs.append(Location(int(x[1])-1, float(x[2]),
                             float(x[3]), float(x[4]), float(x[5])))
                         continue
 
@@ -152,6 +154,12 @@ class Scenario(object):
         self.locs = locs
         self.uavs = uavs
         self.duration = 60000
+
+    def __str__(self):
+        return '{}\n{}\n{}\n{}\n'.format(self.name,
+                [ str(loc) for loc in self.locs ],
+                [ str(uav) for uav in self.uavs ],
+                str(self.duration))
 
     def plays(self):
         """All active plays in this scenario"""
@@ -219,8 +227,10 @@ class Scenario(object):
             'from PyMASE import UAV, Location, get_args',
             'import string',
             '',
+            'M1 = ExampleCtrl()',
             'stateMap = dict()',
             'configMap = dict()',
+            'ctrl_input = { key: False for key in get_args(M1.move) }'
             ])
 
         with pp.define('prepare_ctrl_input', 'uavs', 'ctrl_input_args', 'current_plays'):
@@ -228,12 +238,8 @@ class Scenario(object):
 
             # update each monitor
             for monitor in monitors:
-                pp.write('ctrl_input["')
-                pp.write(str(monitor))
-                pp.write('"] = UAVs[')
-                pp.write(str(monitor.uav))
-                pp.write('].')
-                pp.writeln(monitor.amase_parameter())
+                pp.writeln('ctrl_input["%s"] = UAVs[%d].%s' % (monitor,
+                    monitor.uav, monitor.monitor_name()))
 
             # update the current play for each 
             for play in self.plays():
@@ -253,7 +259,7 @@ class Scenario(object):
                 pp.writeln('configMap[obj.get_ID()] = obj')
 
             pp.newline()
-            with pp.indent('elif isinstance(obj, AirVehicleState.AriVehicleState):'):
+            with pp.indent('elif isinstance(obj, AirVehicleState.AirVehicleState):'):
                 pp.writeln('stateMap[obj.get_ID()] = obj')
 
             # TODO: This line was in the original code generator, though the
@@ -270,15 +276,19 @@ class Scenario(object):
             pp.writeln('return sock')
 
 
+        # TODO: these should be outputted once for each class of behavior
         # Write out behavior skeletons
-        for behavior in behaviors:
+        bs = { b.behavior_name(): b for b in behaviors }
+        for name in bs:
             pp.newline()
-            behavior.amase_behavior_def(pp)
+            bs[name].amase_behavior_def(pp)
 
+        # TODO: these should be outputted once for each class of monitor
         # Write out each monitor
-        for monitor in monitors:
+        ms = { m.monitor_name(): m for m in monitors }
+        for name in ms:
             pp.newline()
-            monitor.amase_monitor_def(pp)
+            ms[name].amase_monitor_def(pp)
 
         pp.newline()
         pp.writeln('sock = connect()')
@@ -298,7 +308,7 @@ class Scenario(object):
         with pp.indent('locations = ['):
             for loc in self.locs:
                 pp.writeln('Location(%f,%f,%f,%f,"%s"),' % (loc.lat, loc.lon,
-                    loc.height, loc.width, string.ascii_uppercase[loc.num-1]))
+                    loc.height, loc.width, string.ascii_uppercase[loc.num]))
             pp.writeln(']')
 
         # Consume initialization messages from the socket
@@ -308,7 +318,7 @@ class Scenario(object):
         with pp.indent('while flag:'):
             pp.writeln('flag = True')
             pp.writeln('message = msg.getObject(sock.recv(2224))')
-            pp.writeln('message_received(message)')
+            pp.writeln('message_received(message, configMap, stateMap)')
             with pp.indent('for uav in UAVs:'):
                 pp.writeln('uav.stateMap = stateMap')
                 with pp.indent('if uav.stateMap.get(uav.id) is None:'):
@@ -329,12 +339,12 @@ class Scenario(object):
 
                 # handle a new message
                 pp.newline()
-                pp.writeln('message_received(message)')
+                pp.writeln('message_received(message, configMap, stateMap)')
 
                 # this shouldn't be necessary, as each UAV is set to reference
                 # the stateMap at startup. Maybe the stateMap just isn't being
                 # updated correctly in message_received?
-                with pp.indent('for i in range(0, uav_n):'):
+                with pp.indent('for i in range(0, %d):' % len(self.uavs)):
                     pp.writeln('UAVs[i].stateMap = stateMap')
 
                 # at this point, the map `ctrl_input` has members that match the
@@ -342,6 +352,7 @@ class Scenario(object):
                 # input.
                 pp.newline()
                 pp.writeln('output = M1.move(**ctrl_input)')
+                pp.writeln('print(output)')
 
                 # Update the internal state based on values of output
                 pp.newline()
@@ -534,7 +545,7 @@ class UAV(object):
 class Monitor(object):
     __slots__ = ['uav', 'target', 'loc']
 
-    def amase_parameter(self):
+    def monitor_name(self):
         """
         Returns the name of the UAV parameter that is queried for this monitor
         """
@@ -544,7 +555,7 @@ class Monitor(object):
         """
         Returns the invocation of the user-supplied monitor function.
         """
-        return '%s_monitor(%s, %d, %d)' % (self.amase_parameter(), str(arg),
+        return '%s_monitor(%s, %d, %d)' % (self.monitor_name(), str(arg),
                 self.uav, self.loc)
 
     def amase_monitor_def(self, pp):
@@ -562,7 +573,7 @@ class FuelMonitor(Monitor):
     def __str__(self):
         return ('M_%d_Fuel_0_0' % self.uav)
 
-    def amase_parameter(self):
+    def monitor_name(self):
         return 'Fuel'
 
     def amase_monitor_def(self, pp):
@@ -587,7 +598,7 @@ class FoundMonitor(Monitor):
     def __str__(self):
         return ('M_%d_Found_%d_0' % (self.uav, self.target))
 
-    def amase_parameter(self):
+    def monitor_name(self):
         return 'Found'
 
     def amase_monitor_def(self, pp):
@@ -623,8 +634,9 @@ class Behavior(object):
         return hash((self.uav, self.uav2, self.loc))
 
     def __str__(self):
-        return 'B_%d_%s_%d_%d' % (self.uav, self.behavior_name(), self.uav2,
-                self.loc)
+        return 'B_{uav}_{name}_{uav2}_{loc}'.format(
+                uav=self.uav, name=self.behavior_name(), uav2=self.uav2,
+                loc=self.loc)
 
     def amase_behavior_def(self, pp):
         """
@@ -664,19 +676,17 @@ class TrackBehavior(Behavior):
 class Play(object):
     @staticmethod
     def make(descr):
-        if descr[2] == 'Loiter':
-            return LoiterPlay(descr[1], descr[3], descr[4])
 
+        # Format: <uav> Loiter <uav2> <loc>
+        if descr[2] == 'Loiter':
+            return LoiterPlay(int(descr[1])-1)
+
+        # Format: <uav> ST <uav2> <loc>
         elif descr[2] == 'ST':
-            return STPlay(descr[1], descr[3], descr[4])
+            return STPlay(int(descr[1])-1, int(descr[3])-1, int(descr[4])-1)
 
         else:
             raise RuntimeError('Invalid play: ' + descr[2])
-
-    def __init__(self, uav, target, loc):
-        self.uav    = int(uav)
-        self.target = int(target)
-        self.loc    = int(loc)
 
     def behaviors(self):
         return set()
@@ -684,13 +694,13 @@ class Play(object):
     def monitors(self):
         return set()
 
-    def __str__(self):
-        return 'P_%d_%s_%d_%d' % (self.uav, self.play_name(), self.target,
-                self.loc)
-
-
 class STPlay(Play):
-    """Search and track for the spescified uav, in the region provided.  """
+    """Search and track for the specified uav, in the region provided.  """
+
+    def __init__(self, uav, target, loc):
+        self.uav = uav
+        self.target = target
+        self.loc = loc
 
     def behaviors(self):
         return set([
@@ -704,12 +714,21 @@ class STPlay(Play):
     def play_name(self):
         return 'ST'
 
+    def __str__(self):
+        return 'P_{}_ST_{}_{}'.format(self.uav, self.target, self.loc)
+
 class LoiterPlay(Play):
     """The Loiter play"""
 
+    def __init__(self, uav):
+        self.uav = uav
+
+    def __str__(self):
+        return 'P_{}_Loiter_0_0'.format(self.uav)
+
     def behaviors(self):
         return set([
-                LoiterBehavior(self.uav, 0, self.loc)])
+                LoiterBehavior(self.uav, 0, 0)])
 
     def play_name(self):
         return 'Loiter'
@@ -720,8 +739,15 @@ if __name__ == "__main__":
     # TODO: maybe switch the specification format to JSON?
     spec = Scenario.parse('spec.txt')
 
+    for play in spec.plays():
+        print str(play)
+
     # determine which monitors will be required by the scenario
     behaviors, monitors = spec.dependencies()
+    for behavior in behaviors:
+        print str(behavior)
+    for monitor in monitors:
+        print str(monitor)
 
     # Write out the XML for AMASE
     with open('../auto_generated/auto_code.xml', 'w') as xml:
