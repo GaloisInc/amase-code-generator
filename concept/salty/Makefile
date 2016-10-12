@@ -1,4 +1,6 @@
 
+EXTRA ?=
+
 SALTY ?= $(shell find ../../.. -name salty -type f | head -n1)
 SLUGS ?= $(shell find ../../../ -name slugs -type f)
 
@@ -14,7 +16,7 @@ endif
 	mv $< $@
 
 ExampleCtrl.py: controller.salt
-	$(SALTY) -s $(SLUGS) -p $<
+	$(SALTY) $(EXTRA) -s $(SLUGS) -p $<
 
 .PHONY: clean
 clean:

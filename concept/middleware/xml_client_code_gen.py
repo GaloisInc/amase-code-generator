@@ -1,18 +1,19 @@
 import sys
 from scenario import Scenario
 
+def dump(xs):
+    for x in xs:
+        print(x)
+
+
 # TODO: maybe switch the specification format to JSON?
 spec = Scenario.parse('spec.txt')
 
-for play in spec.plays():
-    print str(play)
-
 # determine which monitors will be required by the scenario
+dump(spec.plays())
 behaviors, monitors = spec.dependencies()
-for behavior in behaviors:
-    print str(behavior)
-for monitor in monitors:
-    print str(monitor)
+dump(behaviors)
+dump(monitors)
 
 # Write out the XML for AMASE
 with open('../auto_generated/auto_code.xml', 'w') as xml:

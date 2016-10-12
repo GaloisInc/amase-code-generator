@@ -1,65 +1,67 @@
 controller ExampleCtrl where
 
+-- Inputs ----------------------------------------------------------------------
 
--- Fuel monitors are False when the fuel level is OK
-input m_1_Fuel_0_0 (M_1_Fuel_0_0) : Bool = False
-input m_2_Fuel_0_0 (M_2_Fuel_0_0) : Bool = False
+-- Play inputs
+input p_0_Loiter_0_0 (P_0_Loiter_0_0) : Bool = False
+input p_1_Loiter_0_0 (P_1_Loiter_0_0) : Bool = False
+input p_1_ST_0_0     (P_1_ST_0_0)     : Bool = False
+input p_1_ST_0_1     (P_1_ST_0_1)     : Bool = False
 
--- Target monitor is True when the target is found
-input m_1_Found_2_0 (M_1_Found_2_0) : Bool = False
-
-input p_1_Loiter_0_0 (P_1_Loiter_0_0) : Bool = True
-input p_2_Loiter_0_0 (P_2_Loiter_0_0) : Bool = True
-input p_1_ST_2_A     (P_1_ST_2_A    ) : Bool = False
-input p_1_ST_2_B     (P_1_ST_2_B    ) : Bool = False
-
-output b_1_Refuel_0_0 (B_1_Refuel_0_0) : Bool = False
-output b_2_Refuel_0_0 (B_2_Refuel_0_0) : Bool = False
-output b_1_Search_0_0 (B_1_Search_0_0) : Bool = False
-output b_1_Search_0_1 (B_1_Search_0_1) : Bool = False
-output b_1_Upload_0_0 (B_1_Upload_0_0) : Bool = False
-output b_1_Track_2_0  (B_1_Track_2_0 ) : Bool = False
-output b_1_Loiter_0_0 (B_1_Loiter_0_0) : Bool = True
-output b_2_Loiter_0_0 (B_2_Loiter_0_0) : Bool = True
-
--- mutual exclusion for plays
+-- mutual exclusion of plays
+--
+-- NOTE: vehicle 0 only has one possible action: Loiter
 env_trans
-  mutex { p_1_Loiter_0_0, p_1_ST_2_A, p_1_ST_2_B }
+  mutex { p_1_Loiter_0_0, p_1_ST_0_0, p_1_ST_0_1 }
+
+-- Monitor inputs
+input m_0_Fuel_0_0  (M_0_Fuel_0_0)    : Bool = False
+input m_1_Found_0_0 (M_1_Found_0_0)   : Bool = False
+input m_1_Fuel_0_0  (M_1_Fuel_0_0)    : Bool = False
+
+-- Outputs ---------------------------------------------------------------------
+
+-- Behavior outputs
+output b_0_Loiter_0_0 (B_0_Loiter_0_0) : Bool = False
+output b_0_Refuel_0_0 (B_0_Refuel_0_0) : Bool = False
 
 -- mutual exclusion for behaviors
 sys_trans
-  mutex { b_1_Refuel_0_0, b_1_Search_0_0, b_1_Search_0_1, b_1_Upload_0_0
-        , b_1_Track_2_0, b_1_Loiter_0_0 }
+  mutex { b_0_Loiter_0_0
+        , b_0_Refuel_0_0
+        }
 
-  mutex { b_2_Refuel_0_0, b_2_Loiter_0_0 }
+output b_1_Refuel_0_0 (B_1_Refuel_0_0) : Bool = False
+output b_1_Loiter_0_0 (B_1_Loiter_0_0) : Bool = False
+output b_1_Search_1_0 (B_1_Search_1_0) : Bool = False
+output b_1_Search_0_0 (B_1_Search_0_0) : Bool = False
+output b_1_Track_0_0  (B_1_Track_0_0)  : Bool = False
+output b_1_Track_1_0  (B_1_Track_1_0)  : Bool = False
+
+-- mutual exclusion for behaviors
+sys_trans
+  mutex { b_1_Loiter_0_0
+        , b_1_Search_0_0, b_1_Search_1_0
+        , b_1_Track_0_0,  b_1_Track_1_0
+        , b_1_Refuel_0_0
+        }
+
+-- Plays -----------------------------------------------------------------------
 
 -- loitering
 sys_trans
+  (p_0_Loiter_0_0 /\ !m_0_Fuel_0_0) -> b_0_Loiter_0_0
   (p_1_Loiter_0_0 /\ !m_1_Fuel_0_0) -> b_1_Loiter_0_0
-  (p_2_Loiter_0_0 /\ !m_2_Fuel_0_0) -> b_2_Loiter_0_0
 
-
-def play cmd health switch b1 b2 =
-  sys_trans
-    (cmd /\ health /\  switch) -> b1
-    (cmd /\ health /\ !switch) -> b2
-
-play p_1_ST_2_A (!m_1_Fuel_0_0) m_1_Found_2_0 b_1_Search_0_0 b_1_Track_2_0
-play p_1_ST_2_B (!m_1_Fuel_0_0) m_1_Found_2_0 b_1_Search_0_1 b_1_Track_2_0
-
-
--- Contingency -----------------------------------------------------------------
-
-def contingency health action =
-  sys_trans
-    ! health -> action
-
-contingency (!m_1_Fuel_0_0) b_1_Refuel_0_0
-contingency (!m_2_Fuel_0_0) b_2_Refuel_0_0
-
-
--- Default Action --------------------------------------------------------------
-
+-- search/track
 sys_trans
-  !p_1_Loiter_0_0 -> !b_1_Loiter_0_0
-  !p_2_Loiter_0_0 -> !b_2_Loiter_0_0
+  (p_1_ST_0_0 /\ ! m_1_Fuel_0_0 /\ !m_1_Found_0_0) -> b_1_Search_0_0
+  (p_1_ST_0_0 /\ ! m_1_Fuel_0_0 /\  m_1_Found_0_0) -> b_1_Track_0_0
+
+  (p_1_ST_0_1 /\ ! m_1_Fuel_0_0 /\ !m_1_Found_0_0) -> b_1_Search_1_0
+  (p_1_ST_0_1 /\ ! m_1_Fuel_0_0 /\  m_1_Found_0_0) -> b_1_Track_0_0
+
+-- contingency
+sys_trans
+  m_0_Fuel_0_0 -> b_0_Refuel_0_0
+  m_1_Fuel_0_0 -> b_1_Refuel_0_0

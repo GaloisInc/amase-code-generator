@@ -1,4 +1,6 @@
 
+python_deps := $(wildcard *.py)
+
 .PHONY: all
 all: ../auto_generated/auto_code.py ../auto_generated/auto_code.xml
 
@@ -13,5 +15,5 @@ test: clean ../auto_generated/auto_code.py
 
 ../auto_generated/auto_code.xml: ../auto_generated/auto_code.py ;
 
-../auto_generated/auto_code.py: spec.txt xml_client_code_gen.py
+../auto_generated/auto_code.py: spec.txt $(python_deps)
 	python xml_client_code_gen.py

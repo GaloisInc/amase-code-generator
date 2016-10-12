@@ -246,7 +246,6 @@ class Scenario(object):
                 # input.
                 pp.newline()
                 pp.writeln('output = M1.move(**ctrl_input)')
-                pp.writeln('print(output)')
 
                 # Update the internal state based on values of output
                 pp.newline()
