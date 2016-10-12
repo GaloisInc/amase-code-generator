@@ -38,16 +38,21 @@ sys_vars['B_1_Loiter_0_0'] = (0,1)
 sys_vars['B_2_Loiter_0_0'] = (0,1)
 
 
+# mutual exclusion of plays for uav 1
 env_safe |= {'(P_1_ST_2_A = 1) -> ((P_1_Loiter_0_0 = 0) && (P_1_ST_2_B = 0))'}
 
 env_safe |= {'(P_1_Loiter_0_0 = 1) -> ((P_1_ST_2_A = 0) && (P_1_ST_2_B = 0))'}
 
 env_safe |= {'(P_1_ST_2_B = 1) -> ((P_1_ST_2_A = 0) && (P_1_Loiter_0_0 = 0))'}
 
+
+# loiter play
 sys_safe |= {'( (P_1_Loiter_0_0 = 1) && (M_1_Fuel_0_0 = 0) ) -> (B_1_Loiter_0_0 = 1)'}
 
 sys_safe |= {'( (P_2_Loiter_0_0 = 1) && (M_2_Fuel_0_0 = 0) ) -> (B_2_Loiter_0_0 = 1)'}
 
+
+# mutual exclusion for behaviors
 sys_safe |= {'( (B_2_Loiter_0_0 = 1) ) -> (B_2_Refuel_0_0 = 0)'}
 
 sys_safe |= {'( (B_2_Refuel_0_0 = 1) ) -> (B_2_Loiter_0_0 = 0)'}
@@ -70,6 +75,8 @@ sys_safe |= {'( (B_1_Track_2_0 = 1) ) -> ((B_1_Loiter_0_0 = 0) && (B_1_Upload_0_
 sys_safe |= {'( (B_1_Upload_0_0 = 1) ) -> ((B_1_Loiter_0_0 = 0) && (B_1_Track_2_0 = 0) &&'+
 ' (B_1_Search_0_0 = 0) && (B_1_Search_0_1 = 0) && (B_1_Refuel_0_0 = 0))'}
 
+
+# search/track play
 sys_safe |= {'( (P_1_ST_2_A = 1) && (M_1_Fuel_0_0 = 0) && (M_1_Found_2_0 = 0) ) -> (B_1_Search_0_0 = 1)'}
 
 sys_safe |= {'( (P_1_ST_2_B = 1) && (M_1_Fuel_0_0 = 0) && (M_1_Found_2_0 = 0) ) -> (B_1_Search_0_1 = 1)'}
@@ -78,6 +85,8 @@ sys_safe |= {'( (P_1_ST_2_A = 1) && (M_1_Fuel_0_0 = 0) && (M_1_Found_2_0 = 1) ) 
 
 sys_safe |= {'( (P_1_ST_2_B = 1) && (M_1_Fuel_0_0 = 0) && (M_1_Found_2_0 = 1) ) -> (B_1_Track_2_0 = 1)'}
 
+
+# contingency
 sys_safe |= {'((M_1_Fuel_0_0 = 1) ) -> (B_1_Refuel_0_0 = 1)'}
 
 sys_safe |= {'( (M_2_Fuel_0_0 = 1) ) -> (B_2_Refuel_0_0 = 1)'}
@@ -85,6 +94,7 @@ sys_safe |= {'( (M_2_Fuel_0_0 = 1) ) -> (B_2_Refuel_0_0 = 1)'}
 sys_safe |= {'( (P_1_Loiter_0_0 = 0) ) -> (B_1_Loiter_0_0 = 0)'}
 
 sys_safe |= {'( (P_2_Loiter_0_0 = 0) ) -> (B_2_Loiter_0_0 = 0)'}
+
 
 specs = spec.GRSpec(env_vars, sys_vars, env_init, sys_init,
                     env_safe, sys_safe, env_prog, sys_prog)
