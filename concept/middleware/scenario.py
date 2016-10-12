@@ -439,6 +439,20 @@ class UAV(object):
 class Monitor(object):
     __slots__ = ['uav', 'target', 'loc']
 
+    def __init__(self, uav, target, loc):
+        self.uav = uav
+        self.target = target
+        self.loc = loc
+
+    def __eq__(self, other):
+        return isinstance(other, type(self)) \
+                and self.uav == other.uav \
+                and self.target == other.target \
+                and self.loc == other.loc
+
+    def __hash__(self):
+        return hash((self.uav, self.monitor_name(), self.target, self.loc))
+
     def monitor_name(self):
         """
         Returns the name of the UAV parameter that is queried for this monitor
@@ -460,9 +474,7 @@ class Monitor(object):
 
 class FuelMonitor(Monitor):
     def __init__(self, uav):
-        self.uav = uav
-        self.target = 0
-        self.loc = 0
+        super(FuelMonitor, self).__init__(uav, 0, 0)
 
     def __str__(self):
         return ('M_%d_Fuel_0_0' % self.uav)
@@ -485,9 +497,7 @@ class FuelMonitor(Monitor):
 
 class FoundMonitor(Monitor):
     def __init__(self, uav, target):
-        self.uav = uav
-        self.target = target
-        self.loc = 0
+        super(FoundMonitor, self).__init__(uav, target, 0)
 
     def __str__(self):
         return ('M_%d_Found_%d_0' % (self.uav, self.target))
@@ -520,17 +530,24 @@ class Behavior(object):
         self.loc  = int(loc)
 
     def __eq__(self, other):
-        return self.uav == other.uav \
+        return isinstance(other, type(self)) \
+                and self.uav == other.uav \
                 and self.uav2 == other.uav2 \
                 and self.loc  == other.loc
 
     def __hash__(self):
-        return hash((self.uav, self.uav2, self.loc))
+        return hash((self.uav, self.behavior_name(), self.uav2, self.loc))
 
     def __str__(self):
         return 'B_{uav}_{name}_{uav2}_{loc}'.format(
                 uav=self.uav, name=self.behavior_name(), uav2=self.uav2,
                 loc=self.loc)
+
+    def behavior_name(self):
+        """
+        The name of this behavior
+        """
+        pass
 
     def amase_behavior_def(self, pp):
         """
