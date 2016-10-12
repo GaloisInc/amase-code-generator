@@ -1,0 +1,17 @@
+
+.PHONY: all
+all: ../auto_generated/auto_code.py ../auto_generated/auto_code.xml
+
+.PHONY: clean
+clean:
+	$(RM) ../auto_generated/auto_code.py
+	$(RM) ../auto_generated/auto_code.xml
+
+.PHONY: test
+test: clean ../auto_generated/auto_code.py
+	( cd ../auto_generated && python auto_code.py )
+
+../auto_generated/auto_code.xml: ../auto_generated/auto_code.py ;
+
+../auto_generated/auto_code.py: spec.txt xml_client_code_gen.py
+	python xml_client_code_gen.py
