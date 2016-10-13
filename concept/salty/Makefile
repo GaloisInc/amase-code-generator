@@ -4,6 +4,9 @@ EXTRA ?=
 SALTY ?=
 SLUGS ?=
 
+.PHONY: all
+all: ../auto_generated/demo_controller.py
+
 ifeq ("$(SALTY)","")
 	$(error Unable to find salty)
 endif
