@@ -209,15 +209,15 @@ class Scenario(object):
         # Consume initialization messages from the socket
         pp.newline()
         pp.comment('Initialize UAV state')
-        pp.writeln('flag = False')
+        pp.writeln('flag = True')
         with pp.indent('while flag:'):
-            pp.writeln('flag = True')
+            pp.writeln('flag = False')
             pp.writeln('message = msg.getObject(sock.recv(2224))')
             pp.writeln('message_received(message, configMap, stateMap)')
             with pp.indent('for uav in UAVs:'):
                 pp.writeln('uav.stateMap = stateMap')
                 with pp.indent('if uav.stateMap.get(uav.id) is None:'):
-                    pp.writeln('flag = False')
+                    pp.writeln('flag = True')
 
         pp.newline()
         pp.comment('Handle messages')
