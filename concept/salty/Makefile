@@ -1,8 +1,8 @@
 
 EXTRA ?=
 
-SALTY ?=
-SLUGS ?=
+SALTY ?= salty
+SLUGS ?= slugs
 
 .PHONY: all
 all: ../auto_generated/demo_controller.py
