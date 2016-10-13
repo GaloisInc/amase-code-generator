@@ -124,8 +124,8 @@ class Scenario(object):
             'M1 = ExampleCtrl()',
             'stateMap = dict()',
             'configMap = dict()',
-            'ctrl_input = { key: False for key in get_args(M1.move) }'
-            'current_plays = []'
+            'ctrl_input = { key: False for key in get_args(M1.move) }',
+            'current_plays = []',
             ])
 
         with pp.define('prepare_ctrl_input', 'uavs', 'current_plays'):
