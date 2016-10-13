@@ -1,8 +1,8 @@
 
 EXTRA ?=
 
-SALTY ?= $(shell find ../../.. -name salty -type f | head -n1)
-SLUGS ?= $(shell find ../../../ -name slugs -type f)
+SALTY ?=
+SLUGS ?=
 
 ifeq ("$(SALTY)","")
 	$(error Unable to find salty)
