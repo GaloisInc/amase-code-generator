@@ -228,8 +228,8 @@ class Scenario(object):
                 # update monitors
                 pp.newline()
                 for monitor in monitors:
-                    pp.writeln('UAVs[%d] = %s' % (ix,
-                        monitor.amase_user_monitor('UAVs[%d]' % ix)))
+                    pp.writeln('UAVs[%d] = %s' % (monitor.uav,
+                        monitor.amase_user_monitor('UAVs[%d]' % monitor.uav)))
 
                 # handle a new message
                 pp.newline()
