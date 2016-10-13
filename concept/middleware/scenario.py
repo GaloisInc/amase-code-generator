@@ -246,7 +246,7 @@ class Scenario(object):
                 # arguments to the controller, so call it with those as the
                 # input.
                 pp.newline()
-                pp.writeln('prepare_ctrl_input(UAVs, current_plays)')
+                pp.writeln('ctrl_input = prepare_ctrl_input(UAVs, current_plays)')
                 pp.writeln('output = M1.move(**ctrl_input)')
 
                 # Update the internal state based on values of output
