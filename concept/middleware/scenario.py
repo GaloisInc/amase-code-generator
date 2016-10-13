@@ -125,9 +125,10 @@ class Scenario(object):
             'stateMap = dict()',
             'configMap = dict()',
             'ctrl_input = { key: False for key in get_args(M1.move) }'
+            'current_plays = []'
             ])
 
-        with pp.define('prepare_ctrl_input', 'uavs', 'ctrl_input_args', 'current_plays'):
+        with pp.define('prepare_ctrl_input', 'uavs', 'current_plays'):
             pp.writeln('ctrl_input = dict()')
 
             # update each monitor
@@ -245,6 +246,7 @@ class Scenario(object):
                 # arguments to the controller, so call it with those as the
                 # input.
                 pp.newline()
+                pp.writeln('prepare_ctrl_input(UAVs, current_plays)')
                 pp.writeln('output = M1.move(**ctrl_input)')
 
                 # Update the internal state based on values of output
