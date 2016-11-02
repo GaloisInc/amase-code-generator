@@ -7,6 +7,7 @@ import xml.dom.minidom as MD
 def make_doc():
     return MD.Document()
 
+
 def make_node(doc, tag, attrs={}, children=[]):
     node = doc.createElement(tag)
 
@@ -18,5 +19,6 @@ def make_node(doc, tag, attrs={}, children=[]):
 
     return node
 
+
 def simple_node(doc, tag, txt):
-    return make_node(doc, tag, {}, [ doc.createTextNode(str(txt)) ])
+    return make_node(doc, tag, {}, [doc.createTextNode(str(txt))])

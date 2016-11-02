@@ -1,11 +1,12 @@
 
 import sys
 
+
 # Pretty-printing #############################################################
 
 class Pretty(object):
 
-    __slots__ = [ 'file', 'level' ]
+    __slots__ = ['file', 'level']
 
     def __init__(self, file=sys.stdout, level=0):
         self.file = file
@@ -57,17 +58,18 @@ class Pretty(object):
 
         return indented
 
+
 class Indent(object):
     __slots__ = ['parent']
 
     def __init__(self, parent, txt=None):
         self.parent = parent
-        if txt != None:
+        if txt is not None:
             parent.write(txt)
 
         parent.level += 4
 
-        if txt != None:
+        if txt is not None:
             parent.newline()
 
     def __enter__(self):
@@ -75,6 +77,7 @@ class Indent(object):
 
     def __exit__(self, type, value, traceback):
         self.parent.level -= 4
+
 
 class Parens(object):
     __slots__ = ['parent']

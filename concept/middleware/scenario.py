@@ -3,17 +3,18 @@ from xml_helpers import make_doc, make_node, simple_node
 from pretty import Pretty
 import sys
 import datetime
-import itertools
-import string
+from itertools import chain
+from string import ascii_uppercase
+
 
 # Scenario Specification ######################################################
 
 class Scenario(object):
-    __slots__ = [ 'locs', 'uavs', 'name', 'duration' ]
+    __slots__ = ['locs', 'uavs', 'name', 'duration']
 
     @staticmethod
     def parse(file):
-        """Parse the spec file, and produce a scenario"""
+        """Parse the spec file, and produce a scenario."""
         locs = []
         uavs = []
 
@@ -21,27 +22,26 @@ class Scenario(object):
             for x in f:
                 x = x.split()
                 if len(x[0]) > 2:
-
-                    # Format: uav <number> <lat> <lon>
                     if x[0] == 'uav':
-                        uavs.append(UAV(int(x[1]) - 1, float(x[2]), float(x[3])))
-                        continue
-
-                    # Format: loc <number> <lat> <lon> <width> <height>
-                    if x[0] == 'loc':
-                        locs.append(Location(int(x[1])-1, float(x[2]),
-                            float(x[3]), float(x[4]), float(x[5])))
-                        continue
-
-                    if x[0] == 'cmd':
+                        uavs.append(
+                            UAV(                # Format:
+                                int(x[1]) - 1,  # <number>
+                                float(x[2]),    # <lat>
+                                float(x[3])))   # <lon>
+                    elif x[0] == 'loc':
+                        locs.append(
+                            Location(           # Format:
+                                int(x[1]) - 1,  # <number>
+                                float(x[2]),    # <lat>
+                                float(x[3]),    # <lon>
+                                float(x[4]),    # <width>
+                                float(x[5])))   # <height>
+                    elif x[0] == 'cmd':
                         play = Play.make(x[1:])
-                        uavs[play.uav - 1].addPlay(play)
-                        continue
-
-                    # print ('Unknown command: %s' % x[0])
+                        uavs[play.uav - 1].add_play(play)
+                    # else print ('Unknown command: %s' % x[0])
 
         return Scenario('Test Scenario', locs, uavs)
-
 
     def __init__(self, name, locs, uavs):
         self.name = name
@@ -50,59 +50,61 @@ class Scenario(object):
         self.duration = 60000
 
     def __str__(self):
-        return '{}\n{}\n{}\n{}\n'.format(self.name,
-                [ str(loc) for loc in self.locs ],
-                [ str(uav) for uav in self.uavs ],
-                str(self.duration))
+        """Printable representation of a scenario."""
+        return '{name}\n{locs}\n{uavs}\n{dur}\n'.format(
+            name=self.name,
+            locs=[str(loc) for loc in self.locs],
+            uavs=[str(uav) for uav in self.uavs],
+            dur=str(self.duration))
 
     def plays(self):
-        """All active plays in this scenario"""
-        return list(itertools.chain(*map(lambda uav: uav.plays, self.uavs)))
+        """All active plays in this scenario."""
+        return list(chain(*map(lambda uav: uav.plays, self.uavs)))
 
     def dependencies(self):
-        """Produce the behavior and monitor dependencies for this scenario"""
-        behaviors = set()
-        monitors  = set()
-
+        """Produce the behavior and monitor dependencies for this scenario."""
+        behaviors, monitors = set(), set()
         for uav in self.uavs:
             behaviors = behaviors.union(uav.behaviors())
-            monitors  = monitors.union(uav.monitors())
-
+            monitors = monitors.union(uav.monitors())
         return (behaviors, monitors)
 
     def gen_xml(self):
         doc = make_doc()
-        doc.childNodes.append(make_node(doc, 'AMASE', {}, [
-            self._gen_scenario_data(doc),
-            self._gen_event_list(doc)
-            ]))
-
+        doc.childNodes.append(
+            make_node(
+                doc, 'AMASE',
+                children=[
+                    self._gen_scenario_data(doc),
+                    self._gen_event_list(doc)
+                ]))
         return doc
 
     def _gen_scenario_data(self, doc):
-        maplat = sum([ loc.lat for loc in self.locs ])/float(len(self.locs))
-        maplon = sum([ loc.lon for loc in self.locs ])/float(len(self.locs))
-        now    = datetime.datetime.now()
+        loclen = float(len(self.locs))
+        maplat = sum([loc.lat for loc in self.locs]) / loclen
+        maplon = sum([loc.lon for loc in self.locs]) / loclen
+        now = datetime.datetime.now().strftime('%d/%m/%y:%H:%M:%S')
 
-        return make_node(doc, 'ScenarioData', {}, [
-            make_node(doc, 'SimulationView', {
-                'LongExtend': 0.7,
-                'Latitude': maplat,
-                'Longitude': maplon,
-                }, []),
-            simple_node(doc, 'ScenarioName', self.name),
-            simple_node(doc, 'Date',
-                '%d/%d/%d:%d:%d:%d' % (now.day,now.month,now.year,
-                        now.hour,now.minute,now.second)),
-            simple_node(doc, 'Duration',
-                str(self.duration)),
+        return make_node(
+            doc, 'ScenarioData',
+            children=[
+                make_node(
+                    doc, 'SimulationView', attrs={
+                        'LongExtend': 0.7,
+                        'Latitude': maplat,
+                        'Longitude': maplon}),
+                simple_node(doc, 'ScenarioName', self.name),
+                simple_node(doc, 'Date', now),
+                simple_node(doc, 'Duration', str(self.duration)),
             ])
 
     def _gen_event_list(self, doc):
-        uavNodes    = list(itertools.chain(*map(lambda uav: uav.gen_xml(doc), self.uavs)))
-        searchNodes = map(lambda loc: loc.gen_xml(doc), self.locs)
+        uav_nodes = list(chain(*map(lambda uav: uav.gen_xml(doc), self.uavs)))
+        search_nodes = map(lambda loc: loc.gen_xml(doc), self.locs)
 
-        return make_node(doc, 'ScenarioEventList', {}, uavNodes + searchNodes)
+        return make_node(
+            doc, 'ScenarioEventList', children=uav_nodes + search_nodes)
 
     def gen_script(self, file=sys.stdout):
         pp = Pretty(file)
@@ -119,42 +121,42 @@ class Scenario(object):
             'from afrl.cmasi.SessionStatus import SessionStatus',
             'from demo_controller import ExampleCtrl',
             'from PyMASE import UAV, Location, get_args',
-            'import string',
             '',
             'M1 = ExampleCtrl()',
             'stateMap = dict()',
             'configMap = dict()',
             'ctrl_input = { key: False for key in get_args(M1.move) }',
             'current_plays = []',
-            ])
+            'config = AirVehicleConfiguration.AirVehicleConfiguration',
+            'state = AirVehicleState.AirVehicleState'
+        ])
 
         with pp.define('prepare_ctrl_input', 'uavs', 'current_plays'):
             pp.writeln('ctrl_input = dict()')
 
             # update each monitor
             for monitor in monitors:
-                pp.writeln('ctrl_input["%s"] = UAVs[%d].%s' % (monitor,
-                    monitor.uav, monitor.monitor_name()))
+                pp.writeln('ctrl_input["%s"] = UAVs[%d].%s' % (
+                    monitor, monitor.uav, monitor.monitor_name()))
 
-            # update the current play for each 
+            # update the current play for each
             for play in self.plays():
-                # TODO: `current_plays` is never modified, what is it that drives
-                # this input in a running scenario?
-                pp.writeln('ctrl_input["%s"] = "%s" in current_plays' %
-                        (str(play), str(play)))
+                # TODO: `current_plays` is never modified, what is it that
+                # drives this input in a running scenario?
+                pp.writeln('ctrl_input["%s"] = "%s" in current_plays' % (
+                    str(play), str(play)))
 
             pp.writeln('return ctrl_input')
-
 
         # When a message is received, do one of the following:
         with pp.define('message_received', 'obj', 'configMap', 'stateMap'):
 
             pp.newline()
-            with pp.indent('if isinstance(obj, AirVehicleConfiguration.AirVehicleConfiguration):'):
+            with pp.indent('if isinstance(obj, config):'):
                 pp.writeln('configMap[obj.get_ID()] = obj')
 
             pp.newline()
-            with pp.indent('elif isinstance(obj, AirVehicleState.AirVehicleState):'):
+            with pp.indent('elif isinstance(obj, state):'):
                 pp.writeln('stateMap[obj.get_ID()] = obj')
 
             # TODO: This line was in the original code generator, though the
@@ -170,17 +172,16 @@ class Scenario(object):
             pp.writeln('print("connected")')
             pp.writeln('return sock')
 
-
         # TODO: these should be outputted once for each class of behavior
         # Write out behavior skeletons
-        bs = { b.behavior_name(): b for b in behaviors }
+        bs = {b.behavior_name(): b for b in behaviors}
         for name in bs:
             pp.newline()
             bs[name].amase_behavior_def(pp)
 
         # TODO: these should be outputted once for each class of monitor
         # Write out each monitor
-        ms = { m.monitor_name(): m for m in monitors }
+        ms = {m.monitor_name(): m for m in monitors}
         for name in ms:
             pp.newline()
             ms[name].amase_monitor_def(pp)
@@ -202,8 +203,9 @@ class Scenario(object):
         pp.comment('Initialize location state')
         with pp.indent('locations = ['):
             for loc in self.locs:
-                pp.writeln('Location(%f,%f,%f,%f,"%s"),' % (loc.lat, loc.lon,
-                    loc.height, loc.width, string.ascii_uppercase[loc.num]))
+                pp.writeln('Location(%f,%f,%f,%f,"%s"),' % (
+                    loc.lat, loc.lon, loc.height, loc.width,
+                    ascii_uppercase[loc.num]))
             pp.writeln(']')
 
         # Consume initialization messages from the socket
@@ -228,7 +230,8 @@ class Scenario(object):
                 # update monitors
                 pp.newline()
                 for monitor in monitors:
-                    pp.writeln('UAVs[%d] = %s' % (monitor.uav,
+                    pp.writeln('UAVs[%d] = %s' % (
+                        monitor.uav,
                         monitor.amase_user_monitor('UAVs[%d]' % monitor.uav)))
 
                 # handle a new message
@@ -241,8 +244,8 @@ class Scenario(object):
                 with pp.indent('for i in range(0, %d):' % len(self.uavs)):
                     pp.writeln('UAVs[i].stateMap = stateMap')
 
-                # at this point, the map `ctrl_input` has members that match the
-                # arguments to the controller, so call it with those as the
+                # at this point, the map `ctrl_input` has members that match
+                # the arguments to the controller, so call it with those as the
                 # input.
                 pp.newline()
                 pp.writeln('ctrl_input = prepare_ctrl_input(UAVs, current_plays)')
@@ -252,11 +255,11 @@ class Scenario(object):
                 pp.newline()
                 for behavior in behaviors:
                     with pp.indent('if output["%s"]:' % str(behavior)):
-                        pp.writeln('%s(UAVs[%d],%d,%d)' %
-                                (behavior.behavior_name(),
-                                    behavior.uav,
-                                    behavior.uav2,
-                                    behavior.loc))
+                        pp.writeln('%s(UAVs[%d],%d,%d)' % (
+                            behavior.behavior_name(),
+                            behavior.uav,
+                            behavior.uav2,
+                            behavior.loc))
                     pp.newline()
 
         pp.newline()
@@ -271,21 +274,21 @@ class Location(object):
     __slots__ = ['num', 'lat', 'lon', 'width', 'height']
 
     def __init__(self, num, lat, lon, width, height):
-        self.num    = num
-        self.lat    = lat
-        self.lon    = lon
-        self.width  = width
+        self.num = num
+        self.lat = lat
+        self.lon = lon
+        self.width = width
         self.height = height
 
     def __str__(self):
-        return ('L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height))
+        """Location: lat, lon, width, height."""
+        return 'L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height)
 
     def gen_xml(self, doc):
-        return make_node(doc, 'AreaSearchTask', {'Series':'CMASI'}, [
+        return make_node(doc, 'AreaSearchTask', {'Series': 'CMASI'}, [
             make_node(doc, 'SearchArea', {}, [
-                Location._rectangle(doc, self.lat, self.lon, self.width,
-                    self.height),
-                ]),
+                Location._rectangle(
+                    doc, self.lat, self.lon, self.width, self.height)]),
             make_node(doc, 'ViewAngleList', {}, []),
             make_node(doc, 'DesiredWaveLengthBands', {}, []),
             simple_node(doc, 'DwellTime', 0),
@@ -295,44 +298,38 @@ class Location(object):
             simple_node(doc, 'RevisitRate', 0.0),
             make_node(doc, 'Parameters', {}, []),
             simple_node(doc, 'Priority', 0),
-            simple_node(doc, 'Required', 'false'),
-            ])
+            simple_node(doc, 'Required', 'false')])
 
     @staticmethod
     def _rectangle(doc, lat, lon, width, height):
-        return make_node(doc, 'Rectangle', {'Series':'CMASI'}, [
+        return make_node(doc, 'Rectangle', {'Series': 'CMASI'}, [
             Location._center_point(doc, lat, lon),
             simple_node(doc, 'Width', width),
             simple_node(doc, 'Height', height),
-            simple_node(doc, 'Rotation', 0.0),
-            ])
+            simple_node(doc, 'Rotation', 0.0)])
 
     @staticmethod
     def _center_point(doc, lat, lon):
-        return make_node(doc, 'CenterPoint', {'Series':'CMASI'}, [
-            make_node(doc, 'Location3D', {'Series':'CMASI'}, [
+        return make_node(doc, 'CenterPoint', {'Series': 'CMASI'}, [
+            make_node(doc, 'Location3D', {'Series': 'CMASI'}, [
                 simple_node(doc, 'Latitude', lat),
-                simple_node(doc, 'Longitude', lon),
-                ])
-            ])
+                simple_node(doc, 'Longitude', lon)])])
 
 
 # UAVs ########################################################################
 
 class UAV(object):
     def __init__(self, num, lat, lon):
-        self.num   = num
-        self.lat   = lat
-        self.lon   = lon
+        self.num = num
+        self.lat = lat
+        self.lon = lon
         self.plays = []
 
-    def addPlay(self, play):
+    def add_play(self, play):
         self.plays.append(play)
 
-    def __str__(self):
-        return '<UAV ' + str(self.num) + ' ' \
-                + str(self.lat) + ' ' \
-                + str(self.lon) + '>'
+    def __repr__(self):
+        return '<UAV {self.num} {self.lat} {self.lon}>'.format(self=self)
 
     def behaviors(self):
         # start as just the contingency behavior
@@ -345,7 +342,7 @@ class UAV(object):
         return deps
 
     def monitors(self):
-        """The set of monitors that this UAV requires"""
+        """The set of monitors that this UAV requires."""
         # each uav requires the fuel monitor for its refueling contingency
         # behavior
         deps = set([FuelMonitor(self.num)])
@@ -355,15 +352,13 @@ class UAV(object):
 
         return deps
 
-    def gen_xml(self,doc):
-        return [ self.gen_xml_config(doc), self.gen_xml_state(doc) ]
+    def gen_xml(self, doc):
+        return [self.gen_xml_config(doc), self.gen_xml_state(doc)]
 
-    def gen_xml_config(self,doc):
-        """Generate air-vehicle configuration for this UAV"""
-        return make_node(doc, 'AirVehicleConfiguration', {
-                'Time': 0.0,
-                'Series': 'CMASI',
-            }, [
+    def gen_xml_config(self, doc):
+        """Generate air-vehicle configuration for this UAV."""
+        return make_node(
+            doc, 'AirVehicleConfiguration', {'Time': 0.0, 'Series': 'CMASI'}, [
                 simple_node(doc, 'ID', self.num),
                 simple_node(doc, 'Label', 'UAV-' + str(self.num)),
                 simple_node(doc, 'MinimumSpeed', 15.0),
@@ -374,64 +369,55 @@ class UAV(object):
                     UAV._flight_profile(doc, 'Climb', 15.0, 10.0, 5.0),
                     UAV._flight_profile(doc, 'Descent', 25.0, -5.0, -5.0),
                     UAV._flight_profile(doc, 'Loiter', 20.0, 5.0, 0.0),
-                    UAV._flight_profile(doc, 'Dash', 35.0, -2.0, 0.0),
-                    ]),
+                    UAV._flight_profile(doc, 'Dash', 35.0, -2.0, 0.0)]),
                 make_node(doc, 'AvailableTurnTypes', {}, [
                     simple_node(doc, 'TurnType', 'TurnShort'),
-                    simple_node(doc, 'TurnType', 'FlyOver'),
-                    ]),
+                    simple_node(doc, 'TurnType', 'FlyOver')]),
                 simple_node(doc, 'MinimumAltitude', 0.0),
                 simple_node(doc, 'MaximumAltitude', 1000000.0),
-                simple_node(doc, 'MinAltAboveGround', 0.0),
-            ])
+                simple_node(doc, 'MinAltAboveGround', 0.0)])
 
     @staticmethod
-    def _flight_profile(doc, name, airspeed, pitchAngle, verticalSpeed,):
+    def _flight_profile(doc, name, airspeed, pitch_angle, vertical_speed,):
         return make_node(doc, 'FlightProfile', {'Series': 'CMASI'}, [
             simple_node(doc, 'Name', name),
             simple_node(doc, 'Airspeed', airspeed),
-            simple_node(doc, 'PitchAngle', pitchAngle),
-            simple_node(doc, 'VerticalSpeed', verticalSpeed),
+            simple_node(doc, 'PitchAngle', pitch_angle),
+            simple_node(doc, 'VerticalSpeed', vertical_speed),
             simple_node(doc, 'MaxBankAngle', 30.0),
-            simple_node(doc, 'EnergyRate', 0.005),
-            ])
+            simple_node(doc, 'EnergyRate', 0.005)])
 
     def gen_xml_state(self, doc):
-        return make_node(doc, 'AirVehicleState', {
-            'Time': '0.0',
-            'Series': 'CMASI',
-            }, [
-            simple_node(doc, 'ID', self.num),
-            make_node(doc, 'Location', {}, [
-                make_node(doc, 'Location3D', {'Series': 'CMASI'}, [
-                    simple_node(doc, 'Altitude', 50.0),
-                    simple_node(doc, 'Latitude', self.lat),
-                    simple_node(doc, 'Longitude', self.lon),
-                    ]),
-                ]),
-            simple_node(doc, 'u', 0.0),
-            simple_node(doc, 'v', 0.0),
-            simple_node(doc, 'w', 0.0),
-            simple_node(doc, 'udot', 0.0),
-            simple_node(doc, 'vdot', 0.0),
-            simple_node(doc, 'wdot', 0.0),
-            simple_node(doc, 'Heading', 90.0),
-            simple_node(doc, 'Pitch', 0.0),
-            simple_node(doc, 'Roll', 0.0),
-            simple_node(doc, 'Airspeed', 0.0),
-            simple_node(doc, 'VerticalSpeed', 0.0),
-            simple_node(doc, 'ActualEnergyRate', '%f' % 0.00008),
-            simple_node(doc, 'EnergyAvailable', 100.0),
-            simple_node(doc, 'Windspeed', 0.0),
-            simple_node(doc, 'WindDirection', 0.0),
-            simple_node(doc, 'GroundSpeed', 0.0),
-            simple_node(doc, 'GroundTrack', 0.0),
-            simple_node(doc, 'CurrentWaypoint', 0),
-            simple_node(doc, 'CurrentCommand', 0),
-            simple_node(doc, 'Mode', 'Waypoint'),
-            make_node(doc, 'AssociatedTasks', {}, []),
-            simple_node(doc, 'Time', 0),
-            ])
+        return make_node(
+            doc, 'AirVehicleState', {'Time': '0.0', 'Series': 'CMASI'}, [
+                simple_node(doc, 'ID', self.num),
+                make_node(doc, 'Location', {}, [
+                    make_node(doc, 'Location3D', {'Series': 'CMASI'}, [
+                        simple_node(doc, 'Altitude', 50.0),
+                        simple_node(doc, 'Latitude', self.lat),
+                        simple_node(doc, 'Longitude', self.lon)])]),
+                simple_node(doc, 'u', 0.0),
+                simple_node(doc, 'v', 0.0),
+                simple_node(doc, 'w', 0.0),
+                simple_node(doc, 'udot', 0.0),
+                simple_node(doc, 'vdot', 0.0),
+                simple_node(doc, 'wdot', 0.0),
+                simple_node(doc, 'Heading', 90.0),
+                simple_node(doc, 'Pitch', 0.0),
+                simple_node(doc, 'Roll', 0.0),
+                simple_node(doc, 'Airspeed', 0.0),
+                simple_node(doc, 'VerticalSpeed', 0.0),
+                simple_node(doc, 'ActualEnergyRate', '%f' % 0.00008),
+                simple_node(doc, 'EnergyAvailable', 100.0),
+                simple_node(doc, 'Windspeed', 0.0),
+                simple_node(doc, 'WindDirection', 0.0),
+                simple_node(doc, 'GroundSpeed', 0.0),
+                simple_node(doc, 'GroundTrack', 0.0),
+                simple_node(doc, 'CurrentWaypoint', 0),
+                simple_node(doc, 'CurrentCommand', 0),
+                simple_node(doc, 'Mode', 'Waypoint'),
+                make_node(doc, 'AssociatedTasks', {}, []),
+                simple_node(doc, 'Time', 0)])
 
 
 # Monitors ####################################################################
@@ -445,32 +431,28 @@ class Monitor(object):
         self.loc = loc
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) \
-                and self.uav == other.uav \
-                and self.target == other.target \
-                and self.loc == other.loc
+        return all([
+            isinstance(other, type(self)),
+            self.uav == other.uav,
+            self.target == other.target,
+            self.loc == other.loc])
 
     def __hash__(self):
         return hash((self.uav, self.monitor_name(), self.target, self.loc))
 
     def monitor_name(self):
-        """
-        Returns the name of the UAV parameter that is queried for this monitor
-        """
+        """The name of the UAV parameter that is queried for this monitor."""
         pass
 
     def amase_user_monitor(self, arg):
-        """
-        Returns the invocation of the user-supplied monitor function.
-        """
-        return '%s_monitor(%s, %d, %d)' % (self.monitor_name(), str(arg),
-                self.uav, self.loc)
+        """The invocation of the user-supplied monitor function."""
+        return '%s_monitor(%s, %d, %d)' % (
+            self.monitor_name(), str(arg), self.uav, self.loc)
 
     def amase_monitor_def(self, pp):
-        """
-        Returns the definition of this monitor for Amase.
-        """
+        """The definition of this monitor for AMASE."""
         pass
+
 
 class FuelMonitor(Monitor):
     def __init__(self, uav):
@@ -495,6 +477,7 @@ class FuelMonitor(Monitor):
             pp.newline()
             pp.writeln('return uav')
 
+
 class FoundMonitor(Monitor):
     def __init__(self, uav, target):
         super(FoundMonitor, self).__init__(uav, target, 0)
@@ -507,8 +490,12 @@ class FoundMonitor(Monitor):
 
     def amase_monitor_def(self, pp):
         with pp.define('Found_monitor', 'uav', 'uav2', 'loc'):
-            pp.writeln('dist = vincenty((uav.getit("latitude",uav.id),uav.getit("longitude",uav.id))'
-                       ',(uav.getit("latitude",uav2+1),uav.getit("longitude",uav2+1))).meters')
+            pp.writeln(
+                'dist = vincenty(' +
+                '(uav.getit("latitude",  uav.id),' +
+                ' uav.getit("longitude", uav.id)), ' +
+                '(uav.getit("latitude",  uav2+1),' +
+                ' uav.getit("longitude", uav2+1))).meters')
             with pp.indent('if dist < 600 and dist != 0:'):
                 pp.write('uav.Found = 1')
 
@@ -520,8 +507,7 @@ class FoundMonitor(Monitor):
             pp.writeln('return uav')
 
 
-
-# Behaviors ###################################################################
+# Behaviors ################################################################
 
 class Behavior(object):
     def __init__(self, uav, loc, uav2):
@@ -530,32 +516,28 @@ class Behavior(object):
         self.loc  = int(loc)
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) \
-                and self.uav == other.uav \
-                and self.uav2 == other.uav2 \
-                and self.loc  == other.loc
+        return all([
+            isinstance(other, type(self)),
+            self.uav == other.uav,
+            self.uav2 == other.uav2,
+            self.loc == other.loc])
 
     def __hash__(self):
         return hash((self.uav, self.behavior_name(), self.uav2, self.loc))
 
     def __str__(self):
-        return 'B_{uav}_{name}_{uav2}_{loc}'.format(
-                uav=self.uav, name=self.behavior_name(), uav2=self.uav2,
-                loc=self.loc)
+        return 'B_{b.uav}_{b.behavior_name}_{b.uav2}_{b.loc}'.format(b=self)
 
     def behavior_name(self):
-        """
-        The name of this behavior
-        """
+        """The name of this behavior"""
         pass
 
     def amase_behavior_def(self, pp):
-        """
-        The skeleton of how to handle this behavior in AMASE
-        """
+        """The skeleton of how to handle this behavior in AMASE"""
         with pp.define(self.behavior_name(), 'uav', 'uav2', 'loc'):
             pp.comment('TODO: implement behavior')
             pp.writeln('return 0')
+
 
 class RefuelBehavior(Behavior):
     """The Refuel behavior"""
@@ -563,17 +545,20 @@ class RefuelBehavior(Behavior):
     def behavior_name(self):
         return 'Refuel'
 
+
 class LoiterBehavior(Behavior):
-    """The Loiter behavior """
+    """The Loiter behavior"""
 
     def behavior_name(self):
         return 'Loiter'
+
 
 class SearchBehavior(Behavior):
     """The Search behavior"""
 
     def behavior_name(self):
         return 'Search'
+
 
 class TrackBehavior(Behavior):
     """The Track behavior"""
@@ -605,8 +590,9 @@ class Play(object):
     def monitors(self):
         return set()
 
+
 class STPlay(Play):
-    """Search and track for the specified uav, in the region provided.  """
+    """Search and track for the specified uav, in the region provided."""
 
     def __init__(self, uav, target, loc):
         self.uav = uav
@@ -615,8 +601,8 @@ class STPlay(Play):
 
     def behaviors(self):
         return set([
-                SearchBehavior(self.uav, self.target, self.loc),
-                TrackBehavior(self.uav, self.target, self.loc)])
+            SearchBehavior(self.uav, self.target, self.loc),
+            TrackBehavior(self.uav, self.target, self.loc)])
 
     def monitors(self):
         return set([FoundMonitor(self.uav, self.target)])
@@ -625,7 +611,8 @@ class STPlay(Play):
         return 'ST'
 
     def __str__(self):
-        return 'P_{}_ST_{}_{}'.format(self.uav, self.target, self.loc)
+        return 'P_{stp.uav}_ST_{stp.target}_{stp.loc}'.format(stp=self)
+
 
 class LoiterPlay(Play):
     """The Loiter play"""
@@ -641,5 +628,3 @@ class LoiterPlay(Play):
 
     def play_name(self):
         return 'Loiter'
-
-

@@ -1,5 +1,5 @@
-import sys
 from scenario import Scenario
+
 
 def dump(xs):
     for x in xs:
@@ -7,6 +7,7 @@ def dump(xs):
 
 
 # TODO: maybe switch the specification format to JSON?
+# TODO: take input argument from command line?
 spec = Scenario.parse('spec.txt')
 
 # determine which monitors will be required by the scenario
