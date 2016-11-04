@@ -49,6 +49,9 @@ class Scenario(object):
         self.uavs = uavs
         self.duration = 60000
 
+    def __repr__(self):
+        return "Scenario(name='{s.name}', locs={s.locs}, uavs={s.uavs})".format(s=self)
+
     def __str__(self):
         """Printable representation of a scenario."""
         return '{name}\n{locs}\n{uavs}\n{dur}\n'.format(
@@ -280,6 +283,10 @@ class Location(object):
         self.width = width
         self.height = height
 
+    def __repr__(self):
+        return ('Location(num={s.num}, lat={s.lat}, lon={s.lon}, ' +
+                'width={s.width}, height={s.height})').format(s=self)
+
     def __str__(self):
         """Location: lat, lon, width, height."""
         return 'L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height)
@@ -329,7 +336,7 @@ class UAV(object):
         self.plays.append(play)
 
     def __repr__(self):
-        return '<UAV {self.num} {self.lat} {self.lon}>'.format(self=self)
+        return 'UAV(num={s.num}, lat={s.lat}, lon={s.lon})'.format(s=self)
 
     def behaviors(self):
         # start as just the contingency behavior
@@ -529,8 +536,11 @@ class Behavior(object):
     def __hash__(self):
         return hash((self.uav, self.name, self.uav2, self.loc))
 
+    def __repr__(self):
+        return 'Behavior(uav={s.uav}, loc={s.loc}, uav2={s.uav2})'.format(s=self)
+
     def __str__(self):
-        return 'B_{b.uav}_{b.name}_{b.uav2}_{b.loc}'.format(b=self)
+        return 'B_{s.uav}_{s.name}_{s.uav2}_{s.loc}'.format(s=self)
 
     def amase_behavior_def(self, pp):
         """The skeleton of how to handle this behavior in AMASE"""
