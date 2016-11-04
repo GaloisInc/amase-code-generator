@@ -174,7 +174,7 @@ class Scenario(object):
 
         # TODO: these should be outputted once for each class of behavior
         # Write out behavior skeletons
-        bs = {b.behavior_name(): b for b in behaviors}
+        bs = {b.name: b for b in behaviors}
         for name in bs:
             pp.newline()
             bs[name].amase_behavior_def(pp)
@@ -256,7 +256,7 @@ class Scenario(object):
                 for behavior in behaviors:
                     with pp.indent('if output["%s"]:' % str(behavior)):
                         pp.writeln('%s(UAVs[%d],%d,%d)' % (
-                            behavior.behavior_name(),
+                            behavior.name,
                             behavior.uav,
                             behavior.uav2,
                             behavior.loc))
@@ -510,6 +510,10 @@ class FoundMonitor(Monitor):
 # Behaviors ################################################################
 
 class Behavior(object):
+
+    # subclasses should override this property
+    name = 'behavior'
+
     def __init__(self, uav, loc, uav2):
         self.uav  = int(uav)
         self.uav2 = int(uav2)
@@ -523,48 +527,32 @@ class Behavior(object):
             self.loc == other.loc])
 
     def __hash__(self):
-        return hash((self.uav, self.behavior_name(), self.uav2, self.loc))
+        return hash((self.uav, self.name, self.uav2, self.loc))
 
     def __str__(self):
-        return 'B_{b.uav}_{b.behavior_name}_{b.uav2}_{b.loc}'.format(b=self)
-
-    def behavior_name(self):
-        """The name of this behavior"""
-        pass
+        return 'B_{b.uav}_{b.name}_{b.uav2}_{b.loc}'.format(b=self)
 
     def amase_behavior_def(self, pp):
         """The skeleton of how to handle this behavior in AMASE"""
-        with pp.define(self.behavior_name(), 'uav', 'uav2', 'loc'):
+        with pp.define(self.name, 'uav', 'uav2', 'loc'):
             pp.comment('TODO: implement behavior')
             pp.writeln('return 0')
 
 
 class RefuelBehavior(Behavior):
-    """The Refuel behavior"""
-
-    def behavior_name(self):
-        return 'Refuel'
+    name = 'Refuel'
 
 
 class LoiterBehavior(Behavior):
-    """The Loiter behavior"""
-
-    def behavior_name(self):
-        return 'Loiter'
+    name = 'Loiter'
 
 
 class SearchBehavior(Behavior):
-    """The Search behavior"""
-
-    def behavior_name(self):
-        return 'Search'
+    name = 'Search'
 
 
 class TrackBehavior(Behavior):
-    """The Track behavior"""
-
-    def behavior_name(self):
-        return 'Track'
+    name = 'Track'
 
 
 # Plays #######################################################################
