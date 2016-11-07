@@ -537,7 +537,8 @@ class Behavior(object):
         return hash((self.uav, self.name, self.uav2, self.loc))
 
     def __repr__(self):
-        return 'Behavior(uav={s.uav}, loc={s.loc}, uav2={s.uav2})'.format(s=self)
+        return '{cls}(uav={s.uav}, loc={s.loc}, uav2={s.uav2})'.format(
+            cls=self.__class__.__name__, s=self)
 
     def __str__(self):
         return 'B_{s.uav}_{s.name}_{s.uav2}_{s.loc}'.format(s=self)
