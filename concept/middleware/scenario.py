@@ -4,7 +4,6 @@ from pretty import Pretty
 import sys
 import datetime
 from itertools import chain
-from string import ascii_uppercase
 
 
 # Scenario Specification ######################################################
@@ -118,17 +117,17 @@ class Scenario(object):
             'import socket',
             'from geopy.distance import vincenty',
             'from lmcp import LMCPFactory',
-            'from afrl.cmasi import EntityState',
+            # 'from afrl.cmasi import EntityState',  # unused
             'from afrl.cmasi import AirVehicleState',
             'from afrl.cmasi import AirVehicleConfiguration',
-            'from afrl.cmasi.SessionStatus import SessionStatus',
+            # 'from afrl.cmasi.SessionStatus import SessionStatus',  # unused
             'from demo_controller import ExampleCtrl',
             'from PyMASE import UAV, Location, get_args',
             '',
             'M1 = ExampleCtrl()',
             'stateMap = dict()',
             'configMap = dict()',
-            'ctrl_input = { key: False for key in get_args(M1.move) }',
+            'ctrl_input = {key: False for key in get_args(M1.move)}',
             'current_plays = []',
             'config = AirVehicleConfiguration.AirVehicleConfiguration',
             'state = AirVehicleState.AirVehicleState'
@@ -154,11 +153,9 @@ class Scenario(object):
         # When a message is received, do one of the following:
         with pp.define('message_received', 'obj', 'configMap', 'stateMap'):
 
-            pp.newline()
             with pp.indent('if isinstance(obj, config):'):
                 pp.writeln('configMap[obj.get_ID()] = obj')
 
-            pp.newline()
             with pp.indent('elif isinstance(obj, state):'):
                 pp.writeln('stateMap[obj.get_ID()] = obj')
 
@@ -179,22 +176,20 @@ class Scenario(object):
         # Write out behavior skeletons
         bs = {b.name: b for b in behaviors}
         for name in bs:
-            pp.newline()
             bs[name].amase_behavior_def(pp)
 
         # TODO: these should be outputted once for each class of monitor
         # Write out each monitor
         ms = {m.monitor_name(): m for m in monitors}
         for name in ms:
-            pp.newline()
             ms[name].amase_monitor_def(pp)
 
-        pp.newline()
+        pp.vspace()
         pp.writeln('sock = connect()')
         pp.writeln('msg = LMCPFactory.LMCPFactory()')
 
         # Initialize the UAVs
-        pp.newline()
+        pp.vspace()
         pp.comment('Initialize UAVs')
         with pp.indent('UAVs = ['):
             for uav in self.uavs:
@@ -202,17 +197,15 @@ class Scenario(object):
             pp.writeln(']')
 
         # Construct an AMASE location for each of our locations
-        pp.newline()
+        pp.vspace()
         pp.comment('Initialize location state')
         with pp.indent('locations = ['):
             for loc in self.locs:
-                pp.writeln('Location(%f,%f,%f,%f,"%s"),' % (
-                    loc.lat, loc.lon, loc.height, loc.width,
-                    ascii_uppercase[loc.num]))
+                pp.writeln(loc.__repr__() + ',')
             pp.writeln(']')
 
         # Consume initialization messages from the socket
-        pp.newline()
+        pp.vspace()
         pp.comment('Initialize UAV state')
         pp.writeln('flag = True')
         with pp.indent('while flag:'):
@@ -224,21 +217,21 @@ class Scenario(object):
                 with pp.indent('if uav.stateMap.get(uav.id) is None:'):
                     pp.writeln('flag = True')
 
-        pp.newline()
+        pp.vspace()
         pp.comment('Handle messages')
         with pp.indent('try:'):
             with pp.indent('while True:'):
                 pp.writeln('message = msg.getObject(sock.recv(2224))')
 
                 # update monitors
-                pp.newline()
+                pp.vspace()
                 for monitor in monitors:
                     pp.writeln('UAVs[%d] = %s' % (
                         monitor.uav,
                         monitor.amase_user_monitor('UAVs[%d]' % monitor.uav)))
 
                 # handle a new message
-                pp.newline()
+                pp.vspace()
                 pp.writeln('message_received(message, configMap, stateMap)')
 
                 # this shouldn't be necessary, as each UAV is set to reference
@@ -250,25 +243,27 @@ class Scenario(object):
                 # at this point, the map `ctrl_input` has members that match
                 # the arguments to the controller, so call it with those as the
                 # input.
-                pp.newline()
+                pp.vspace()
                 pp.writeln('ctrl_input = prepare_ctrl_input(UAVs, current_plays)')
                 pp.writeln('output = M1.move(**ctrl_input)')
 
                 # Update the internal state based on values of output
-                pp.newline()
+                pp.vspace()
                 for behavior in behaviors:
                     with pp.indent('if output["%s"]:' % str(behavior)):
-                        pp.writeln('%s(UAVs[%d],%d,%d)' % (
+                        pp.writeln('%s(UAVs[%d], %d, %d)' % (
                             behavior.name,
                             behavior.uav,
                             behavior.uav2,
                             behavior.loc))
-                    pp.newline()
+                    pp.vspace()
 
-        pp.newline()
+        pp.vspace()
         with pp.indent('finally:'):
             pp.writeln('print("closing socket")')
             pp.writeln('sock.close()')
+
+        pp.vspace()
 
 
 # Locations ###################################################################
@@ -284,7 +279,7 @@ class Location(object):
         self.height = height
 
     def __repr__(self):
-        return ('Location(num={s.num}, lat={s.lat}, lon={s.lon}, ' +
+        return ('Location({s.num}, lat={s.lat}, lon={s.lon}, ' +
                 'width={s.width}, height={s.height})').format(s=self)
 
     def __str__(self):
@@ -474,14 +469,10 @@ class FuelMonitor(Monitor):
     def amase_monitor_def(self, pp):
         with pp.define('Fuel_monitor', 'uav', 'uav2', 'loc'):
             pp.writeln('fuel = uav.get_energy()')
-            with pp.indent('if fuel <= 90 and fuel != 0:'):
-                pp.write('uav.Fuel = 1')
-
-            pp.newline()
+            with pp.indent('if 0 < fuel <= 90:'):
+                pp.writeln('uav.Fuel = 1')
             with pp.indent('elif fuel > 90:'):
-                pp.write('uav.Fuel = 0')
-
-            pp.newline()
+                pp.writeln('uav.Fuel = 0')
             pp.writeln('return uav')
 
 
@@ -497,20 +488,15 @@ class FoundMonitor(Monitor):
 
     def amase_monitor_def(self, pp):
         with pp.define('Found_monitor', 'uav', 'uav2', 'loc'):
-            pp.writeln(
-                'dist = vincenty(' +
-                '(uav.getit("latitude",  uav.id),' +
-                ' uav.getit("longitude", uav.id)), ' +
-                '(uav.getit("latitude",  uav2+1),' +
-                ' uav.getit("longitude", uav2+1))).meters')
-            with pp.indent('if dist < 600 and dist != 0:'):
-                pp.write('uav.Found = 1')
-
-            pp.newline()
+            with pp.indent('dist = vincenty('):
+                pp.writeln('(uav.getit("latitude",  uav.id),')
+                pp.writeln(' uav.getit("longitude", uav.id)),')
+                pp.writeln('(uav.getit("latitude",  uav2+1),')
+                pp.writeln(' uav.getit("longitude", uav2+1))).meters')
+            with pp.indent('if 0 < dist < 600:'):
+                pp.writeln('uav.Found = 1')
             with pp.indent('else:'):
-                pp.write('uav.Found = 0')
-
-            pp.newline()
+                pp.writeln('uav.Found = 0')
             pp.writeln('return uav')
 
 
@@ -574,11 +560,15 @@ class Play(object):
 
         # Format: <uav> Loiter <uav2> <loc>
         if descr[2] == 'Loiter':
-            return LoiterPlay(int(descr[1])-1)
+            return LoiterPlay(
+                int(descr[1]) - 1)
 
         # Format: <uav> ST <uav2> <loc>
         elif descr[2] == 'ST':
-            return STPlay(int(descr[1])-1, int(descr[3])-1, int(descr[4])-1)
+            return STPlay(
+                int(descr[1]) - 1,
+                int(descr[3]) - 1,
+                int(descr[4]) - 1)
 
         else:
             raise RuntimeError('Invalid play: ' + descr[2])

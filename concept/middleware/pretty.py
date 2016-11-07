@@ -22,12 +22,15 @@ class Pretty(object):
         self.file.write(str(x))
 
     def writeln(self, x):
-        self.file.write(x)
         self.newline()
+        self.file.write(x)
 
     def newline(self):
-        self.file.write('\n')
+        self.vspace()
         self.file.write(' ' * self.level)
+
+    def vspace(self):
+        self.file.write('\n')
 
     def sep(self, sep, things):
         if len(things) <= 0:
@@ -40,13 +43,10 @@ class Pretty(object):
             self.write(thing)
 
     def comment(self, txt):
-        self.write('# ')
-        self.writeln(txt)
+        self.writeln('# ' + txt)
 
     def define(self, name, *params):
-        self.newline()
-        self.write('def ')
-        self.write(name)
+        self.write('\n\n\ndef ' + name)
 
         with self.parens():
             self.sep(', ', params)
@@ -54,7 +54,6 @@ class Pretty(object):
         self.write(':')
 
         indented = self.indent()
-        self.newline()
 
         return indented
 
@@ -65,12 +64,10 @@ class Indent(object):
     def __init__(self, parent, txt=None):
         self.parent = parent
         if txt is not None:
+            parent.newline()
             parent.write(txt)
 
         parent.level += 4
-
-        if txt is not None:
-            parent.newline()
 
     def __enter__(self):
         return self
