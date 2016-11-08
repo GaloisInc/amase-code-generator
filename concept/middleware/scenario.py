@@ -467,9 +467,9 @@ class FuelMonitor(Monitor):
         with pp.define('fuel_monitor', 'uav', 'uav2', 'loc'):
             pp.writeln('fuel = uav.get_energy()')
             with pp.indent('if 0 < fuel <= 90:'):
-                pp.writeln('uav.fuel = 1')
+                pp.writeln('uav.Fuel = 1')
             with pp.indent('elif fuel > 90:'):
-                pp.writeln('uav.fuel = 0')
+                pp.writeln('uav.Fuel = 0')
             pp.writeln('return uav')
 
 
