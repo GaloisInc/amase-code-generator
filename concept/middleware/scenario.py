@@ -283,7 +283,7 @@ class Location(object):
 
     def __str__(self):
         """Location: lat, lon, width, height."""
-        return 'L_%d_%d_%d_%d' % (self.lat, self.lon, self.width, self.height)
+        return 'L_{s.lat:d}_{s.lon:d}_{s.width:d}_{s.height:d}'.format(s=self)
 
     def gen_xml(self, doc):
         return make_node(doc, 'AreaSearchTask', {'Series': 'CMASI'}, [
