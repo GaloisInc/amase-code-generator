@@ -100,7 +100,7 @@ class Scenario(object):
                         'Longitude': maplon}),
                 simple_node(doc, 'ScenarioName', self.name),
                 simple_node(doc, 'Date', now),
-                simple_node(doc, 'Duration', str(self.duration)),
+                simple_node(doc, 'ScenarioDuration', str(self.duration)),
             ])
 
     def _gen_event_list(self, doc):

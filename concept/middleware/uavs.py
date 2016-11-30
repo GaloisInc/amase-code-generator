@@ -49,7 +49,7 @@ class UAV(object):
                 simple_node(doc, 'Label', 'UAV-' + str(self.num)),
                 simple_node(doc, 'MinimumSpeed', 15.0),
                 simple_node(doc, 'MaximumSpeed', 15.0),
-                make_node(doc, 'NomninalFlightProfile', {}, [
+                make_node(doc, 'NominalFlightProfile', {}, [
                     UAV._flight_profile(doc, 'Cruise', 20.0, 0.0, 0.0)]),
                 make_node(doc, 'AlternateFlightProfiles', {}, [
                     UAV._flight_profile(doc, 'Climb', 15.0, 10.0, 5.0),
@@ -71,7 +71,7 @@ class UAV(object):
             simple_node(doc, 'PitchAngle', pitch_angle),
             simple_node(doc, 'VerticalSpeed', vertical_speed),
             simple_node(doc, 'MaxBankAngle', 30.0),
-            simple_node(doc, 'EnergyRate', 0.005)])
+            simple_node(doc, 'EnergyRate', 0.01)])
 
     def gen_xml_state(self, doc):
         return make_node(
@@ -91,11 +91,14 @@ class UAV(object):
                 simple_node(doc, 'Heading', 90.0),
                 simple_node(doc, 'Pitch', 0.0),
                 simple_node(doc, 'Roll', 0.0),
+                simple_node(doc, 'p', 0.0),
+                simple_node(doc, 'q', 0.0),
+                simple_node(doc, 'r', 0.0),
                 simple_node(doc, 'Airspeed', 0.0),
                 simple_node(doc, 'VerticalSpeed', 0.0),
                 simple_node(doc, 'ActualEnergyRate', '%f' % 0.00008),
                 simple_node(doc, 'EnergyAvailable', 100.0),
-                simple_node(doc, 'Windspeed', 0.0),
+                simple_node(doc, 'WindSpeed', 0.0),
                 simple_node(doc, 'WindDirection', 0.0),
                 simple_node(doc, 'GroundSpeed', 0.0),
                 simple_node(doc, 'GroundTrack', 0.0),

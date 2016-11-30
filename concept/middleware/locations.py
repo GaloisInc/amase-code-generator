@@ -26,10 +26,10 @@ class Location(object):
                 Location._rectangle(
                     doc, self.lat, self.lon, self.width, self.height)]),
             make_node(doc, 'ViewAngleList', {}, []),
-            make_node(doc, 'DesiredWaveLengthBands', {}, []),
+            make_node(doc, 'DesiredWavelengthBands', {}, []),
             simple_node(doc, 'DwellTime', 0),
             simple_node(doc, 'GroundSampleDistance', 0.0),
-            simple_node(doc, 'TaskId', 10 + self.num),
+            simple_node(doc, 'TaskID', 10 + self.num),
             make_node(doc, 'Label', {}, []),
             simple_node(doc, 'RevisitRate', 0.0),
             make_node(doc, 'Parameters', {}, []),
@@ -46,7 +46,7 @@ class Location(object):
 
     @staticmethod
     def _center_point(doc, lat, lon):
-        return make_node(doc, 'CenterPoint', {'Series': 'CMASI'}, [
+        return make_node(doc, 'CenterPoint', {}, [
             make_node(doc, 'Location3D', {'Series': 'CMASI'}, [
                 simple_node(doc, 'Latitude', lat),
                 simple_node(doc, 'Longitude', lon)])])
