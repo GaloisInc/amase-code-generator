@@ -45,7 +45,7 @@
                             <DockableNode dockableId="avtas.amase.ui.VehicleStateDisplay"/>
                           </DockingPortNode>
                           <DockingPortNode>
-                            <DockableNode dockableId="amase.examples.MultiAgent"/>
+                            <DockableNode dockableId="amase.examples.PlayGUI"/>
                           </DockingPortNode>
                         </SplitNode>
                       </DockingPortNode>

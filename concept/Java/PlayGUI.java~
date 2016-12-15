@@ -26,14 +26,15 @@ import javax.swing.border.EmptyBorder;
 public class MultiAgent extends AmasePlugin {
 
     JPanel panel;
+    SessionStatus lastStatus = null;
+
     JButton uav1Loiter;
     JButton uav1SearchTrackUAV2inA;
     JButton uav1SearchTrackUAV2inB;
     JButton uav2Loiter;
-    SessionStatus lastStatus = null;
 
     public MultiAgent() {
-        setPluginName("Multi-Agent");
+        setPluginName("Play-GUI");
         setupGui();
     }
 
@@ -49,6 +50,7 @@ public class MultiAgent extends AmasePlugin {
 
     protected void initScenario(ScenarioEvent scenarioEvent) {
         System.out.println("New Scenario loaded.");
+
             uav1Loiter.setEnabled(true);
             uav1SearchTrackUAV2inA.setEnabled(true);
             uav1SearchTrackUAV2inB.setEnabled(true);
@@ -64,110 +66,71 @@ public class MultiAgent extends AmasePlugin {
         panel = new JPanel();
         panel.setLayout(new FlowLayout(FlowLayout.CENTER));
         panel.setBorder(new EmptyBorder(5, 5, 5, 5));
+
         uav1Loiter = new JButton("UAV1 Loiter");
-        uav1SearchTrackUAV2inA = new JButton("UAV1 ST UAV2 A");
-        uav1SearchTrackUAV2inB = new JButton("UAV1 ST UAV2 B");
-        uav2Loiter = new JButton("UAV2 Loiter");
-        panel.add(uav1Loiter);
-        panel.add(uav1SearchTrackUAV2inA);
-        panel.add(uav1SearchTrackUAV2inB);
-        panel.add(uav2Loiter);
-
-        // set the button to be disabled until a task is loaded in the scenario
-        uav1Loiter.setEnabled(false);
-        uav1SearchTrackUAV2inA.setEnabled(false);
-        uav1SearchTrackUAV2inB.setEnabled(false);
-        uav2Loiter.setEnabled(false);
-
+	panel.add(uav1Loiter);
+	uav1Loiter.setEnabled(false);
         uav1Loiter.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 notify11();
             }
         });
+
+        uav1SearchTrackUAV2inA = new JButton("UAV1 ST UAV2 A");
+        panel.add(uav1SearchTrackUAV2inA);
+        uav1SearchTrackUAV2inA.setEnabled(false);
         uav1SearchTrackUAV2inA.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                notify12();
-            }
-        });
-        uav1SearchTrackUAV2inB.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 notify21();
             }
         });
+
+        uav1SearchTrackUAV2inB = new JButton("UAV1 ST UAV2 B");
+        uav1SearchTrackUAV2inB.setEnabled(false);
+        panel.add(uav1SearchTrackUAV2inB);
+        uav1SearchTrackUAV2inB.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                notify31();
+            }
+        });
+
+        uav2Loiter = new JButton("UAV2 Loiter");
+        panel.add(uav2Loiter);
+        uav2Loiter.setEnabled(false);
         uav2Loiter.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                notify22();
+                notify12();
             }
         });
+
     }
     private void notify11() {
-        String str = new String(" ");
-        // get a list of the current state of all aircraft in the scenario
-
-        str = new String("This is play: ");
-
-        str = str + "UAV1 Loiter.";
-        
-        System.out.println(str);
-
         sendPlay(1,1);
     }
 
-    private void notify12() {
-        String str = new String(" ");
-        // get a list of the current state of all aircraft in the scenario
-
-        str = new String("This is play: ");
-
-        str = str + "UAV1 Search & Track UAV2 in A";
-
-        System.out.println(str);
-        sendPlay(2,1);
-
-    }    
-
     private void notify21() {
-        String str = new String(" ");
-        // get a list of the current state of all aircraft in the scenario
-
-        str = new String("This is play: ");
-
-        str = str + "UAV1 Search & Track UAV2 in B";
-
-        System.out.println(str);
-        sendPlay(3,1);
-
+        sendPlay(2,1);
     }    
 
-    private void notify22() {
-        String str = new String(" ");
-        // get a list of the current state of all aircraft in the scenario
+    private void notify31() {
+        sendPlay(3,1);
+    }    
 
-        str = new String("This is play: ");
-
-        str = str + "UAV2 Loiter.";
-
-        System.out.println(str);
+    private void notify12() {
         sendPlay(1,2);
-
     }    
 
     void sendPlay(int a, int b) {
 
-        // create a new CMASI zone.  In this case, a KeepOutZone.
         Play play = new Play();
         play.setPlayID(a);
         play.setUAVID(b);
         play.setTime(lastStatus.getScenarioTime());
 
-        // tells the plugin to fire the task to the rest of the application
         fireEvent(play);
     }
-    
-    
-
 }

@@ -265,3 +265,114 @@ class Scenario(object):
             pp.writeln('sock.close()')
 
         pp.vspace()
+
+
+    def gen_GUI_script(self, file=sys.stdout):
+        pp = Pretty(file)
+
+        behaviors, monitors = self.dependencies()
+        map(pp.writeln, [
+            'package amase.examples;',
+            'import afrl.cmasi.SessionStatus;',
+            'import afrl.cmasi.Play;',
+            'import java.util.HashMap;',
+            'import avtas.app.UserExceptions;',
+            'import avtas.amase.AmasePlugin;',
+            'import avtas.amase.scenario.ScenarioEvent;',
+            'import avtas.amase.scenario.ScenarioState;',
+            'import avtas.amase.util.CmasiNavUtils;',
+            'import avtas.amase.util.CmasiUtils;',
+            'import avtas.app.AppEventManager;',
+            'import avtas.util.NavUtils;',
+            'import java.awt.Component;',
+            'import java.awt.FlowLayout;',
+            'import java.awt.event.ActionEvent;',
+            'import java.awt.event.ActionListener;',
+            'import java.util.ArrayList;',
+            'import java.util.List;',
+            'import java.util.Random;',
+            'import java.util.TreeMap;',
+            'import javax.swing.JButton;',
+            'import javax.swing.JPanel;',
+            'import javax.swing.border.EmptyBorder;',
+            ''
+        ])
+
+        with pp.indent('public class PlayGUI extends AmasePlugin {'):
+            pp.writeln('JPanel panel;')
+            pp.writeln('SessionStatus lastStatus = null;')
+            for uav in self.uavs:
+                for play in uav.plays:
+                    pp.writeln('JButton {};'.format(play.__str__()))
+            with pp.indent('public PlayGUI() {'):
+                pp.writeln('setPluginName("Play-GUI");')
+                pp.writeln('setupGui();')
+            pp.writeln('}')
+            pp.vspace()
+
+            pp.writeln('@Override')
+            with pp.indent('public void eventOccurred(Object event) {'):
+                with pp.indent('if (event instanceof ScenarioEvent) {'):
+                    pp.writeln('initScenario((ScenarioEvent) event);')
+                pp.writeln('}')
+                with pp.indent('else if (event instanceof SessionStatus) {'):
+                    pp.writeln('lastStatus = (SessionStatus) event;')
+                pp.writeln('}')
+            pp.writeln('}')
+
+            with pp.indent('protected void initScenario(ScenarioEvent scenarioEvent) {'):
+                pp.writeln('System.out.println("New Scenario loaded.");')
+                for uav in self.uavs:
+                    for play in uav.plays:
+                        pp.writeln('{}.setEnabled(true);'.format(play.__str__()))
+            pp.writeln('}')
+
+            pp.writeln('@Override')
+            with pp.indent('public Component getGui() {'):
+                pp.writeln('return panel;')
+            pp.writeln('}')
+
+            with pp.indent('protected void setupGui() {'):
+                pp.writeln('panel = new JPanel();')
+                pp.writeln('panel.setLayout(new FlowLayout(FlowLayout.CENTER));')
+                pp.writeln('panel.setBorder(new EmptyBorder(5, 5, 5, 5));')
+                for uav in self.uavs:
+                    for i, play in enumerate(uav.plays):
+                        pp.writeln('{0} = new JButton("{0}");'.format(play.__str__()))
+                        pp.writeln('panel.add({});'.format(play.__str__()))
+                        pp.writeln('{0}.setEnabled(false);'.format(play.__str__()))
+                        with pp.indent('{0}.addActionListener(new ActionListener() {{'.format(play.__str__())):
+                            pp.writeln('@Override')
+                            with pp.indent('public void actionPerformed(ActionEvent e) {{'.format(play.__str__())):
+                                pp.writeln('notify{}{}();'.format(i+1,play.uav+1))
+                            pp.writeln('}')
+                        pp.writeln('});')
+            pp.writeln('}')
+
+            for uav in self.uavs:
+                for i, play in enumerate(uav.plays):
+                    with pp.indent('private void notify{}{}() {{'.format(i+1,play.uav+1)):
+                        pp.writeln('sendPlay({},{});'.format(i+1,play.uav+1))
+                    pp.writeln('}')
+
+            with pp.indent('void sendPlay(int a, int b) {'):
+                pp.writeln('Play play = new Play();')
+                pp.writeln('play.setPlayID(a);')
+                pp.writeln('play.setUAVID(b);')
+                pp.writeln('play.setTime(lastStatus.getScenarioTime());')
+                pp.writeln('fireEvent(play);')
+            pp.writeln('}')
+        pp.writeln('}')
+
+
+
+#     void sendPlay(int a, int b) {
+
+#         Play play = new Play();
+#         play.setPlayID(a);
+#         play.setUAVID(b);
+#         play.setTime(lastStatus.getScenarioTime());
+
+#         fireEvent(play);
+#     }
+# }

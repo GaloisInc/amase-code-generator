@@ -25,3 +25,6 @@ with open('../auto_generated/auto_code.xml', 'w') as xml:
 #     spec.gen_script(script)
 with open('../auto_generated/auto_code.py', 'w') as script:
     spec.gen_script(script)
+
+with open('../Java/PlayGUI.java', 'w') as script:
+    spec.gen_GUI_script(script)
