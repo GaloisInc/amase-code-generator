@@ -45,6 +45,12 @@ from afrl.cmasi import EntityState
 from afrl.cmasi import AirVehicleState
 from afrl.cmasi import CameraState
 from afrl.cmasi import AirVehicleConfiguration
+from afrl.cmasi import Location3D
+from afrl.cmasi import Circle
+from afrl.cmasi import Rectangle
+from afrl.cmasi import AreaSearchTask
+from afrl.cmasi import KeepOutZone
+from afrl.cmasi import KeepInZone
 from afrl.cmasi.SessionStatus import SessionStatus
 from afrl.cmasi.SimulationStatusType import SimulationStatusType
 from afrl.cmasi.PointSearchTask import PointSearchTask
@@ -120,6 +126,43 @@ class Map:
         longt = float(longt) / 100000000.
         return (lat,longt,50)
 
+class MapViz(object):
+    def __init__(self,id, sock):
+        self.sock = sock
+        self.id = id
+    def draw_circle(self, location, color = "green", radius = 2.):
+        if color == "green":
+            self.draw_green_circle(location, radius = radius)
+        if color == "red":
+            self.draw_red_rect(location, radius = radius)
+
+    def draw_green_circle(self, location, radius = 2.):
+        center_point = location
+        center_point.set_Altitude(100.0)
+        center_point.set_AltitudeType(AltitudeType.AltitudeType.MSL)
+        entity = KeepInZone.KeepInZone()
+        rect = Rectangle.Rectangle()
+        rect.set_CenterPoint(center_point)
+        rect.set_Width(2*radius)
+        rect.set_Height(radius)
+        entity.set_Boundary(rect)
+        this = LMCPFactory.packMessage(entity, True)
+        self.sock.send(this)
+
+    def draw_red_rect(self, location, radius = 2.):
+        center_point = location
+        center_point.set_Altitude(100.0)
+        center_point.set_AltitudeType(AltitudeType.AltitudeType.MSL)
+        entity = KeepOutZone.KeepOutZone()
+        rect = Rectangle.Rectangle()
+        rect.set_CenterPoint(center_point)
+        rect.set_Width(radius)
+        rect.set_Height(2*radius)
+        entity.set_Boundary(rect)
+        entity.set_ZoneID(self.id)
+        this = LMCPFactory.packMessage(entity, True)
+        self.sock.send(this)
+
 def toString(self):
         return "Location {}: Latitude: {} Longitude: {} Height: {} Width: {}"\
         .format(self.name,self.center_lat,self.center_lon,self.height,self.width)
@@ -133,11 +176,14 @@ class Location:
         self.center_lon = lon
         self.height = height
         self.width = width
+
+    def __str__(self):
+        return 'Longitude: {}\nLatitude: {}\nHeight: {}\n Width: {}'.format(self.center_lon, self.center_lat, self.height, self.width)
     
 
 class UAV:
 
-    def __init__(self,id,sock,stateMap,d_w = 0.001,d_t = 0,d_l = 0,turning_radius = .007):
+    def __init__(self,id,sock,stateMap,d_w = 0.005,d_t = 0,d_l = 0,turning_radius = .003):
 
         self.id = id
         self.commandr = MissionCommand.MissionCommand()
@@ -196,7 +242,8 @@ class UAV:
             pre_ve = (longtitude,latitude,heading)
             p = (location.center_lon,location.center_lat,deg2rad(X))
             pre_ve = (pre_ve[0],pre_ve[1],deg2rad(convert_heading(pre_ve[2])))
-            paths = search.point_search(pre_ve = pre_ve, p = p,xc=deg2rad(xc),xr=deg2rad(xr),s=s,d_t=self.d_t, d_l = self.d_l, turning_radius = self.turning_radius, step_size = step_size)
+            paths = search.point_search(pre_ve = pre_ve, p = p,xc=deg2rad(xc),xr=deg2rad(xr),s=s,d_t=self.d_t\
+                , d_l = self.d_l, turning_radius = self.turning_radius, step_size = step_size)
 
             self.commandr = MissionCommand.MissionCommand()
             self.commandr.set_FirstWaypoint(0)
@@ -236,7 +283,8 @@ class UAV:
             latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
             pre_ve = (longtitude,latitude,heading)
             nextWaypoint = Waypoint.Waypoint()
-            paths = search.line_search(smoothing = smoothing, pre_ve = pre_ve, line = line, angles = deg2rad(angles), turning_radius = self.turning_radius, step_size = step_size, b = False)
+            paths = search.line_search(smoothing = smoothing, pre_ve = pre_ve, line = line\
+                , angles = deg2rad(angles), turning_radius = self.turning_radius, step_size = step_size, b = False)
             
             self.commandr = MissionCommand.MissionCommand()
             self.commandr.set_FirstWaypoint(0)
@@ -266,16 +314,19 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commandr, True))
             return i
 
-    def spiral_search(self, location, extent=.01, alpha=0.9, step = 36, step_size = 0.005):
+    def spiral_search(self, location, extent=.03, alpha=0.9, step = 10, step_size = 0.003):
 
-        if self.state != 'spiral_search':
+        if self.state != 'spiral_search'+location.name:
+            self.state = 'spiral_search'+location.name
             heading = self.stateMap.get(self.id).get_Heading()
             longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
             latitude = self.stateMap.get(self.id).get_Location().get_Latitude()
             pre_ve = (longtitude,latitude,heading)
             p = (location.center_lon,location.center_lat,0)
-            paths = search.spiral_search(pre_ve = pre_ve, p = p,d_w = self.d_w, d_l = self.d_l, alpha = alpha, extent = extent, step = deg2rad(step), turning_radius = self.turning_radius, step_size = step_size)
-            self.state = 'spiral_search'
+            paths = search.spiral_search(pre_ve = pre_ve, p = p,d_w = self.d_w, d_l = self.d_l\
+                , alpha = alpha, extent = extent, step = deg2rad(step), turning_radius = .001\
+                , step_size = step_size)
+            
             self.rloc = []
 
             self.commandr = MissionCommand.MissionCommand()
@@ -305,10 +356,10 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commandr, True))
             return i
 
-    def area_search(self,location=None,pre_ve=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.5):
+    def area_search(self,location=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.005):
         
-        if self.state != 'area_search':
-            self.state = 'area_search'
+        if self.state != 'area_search'+location.name:
+            self.state = 'area_search'+location.name
             nextWaypoint = Waypoint.Waypoint()
             heading = self.stateMap.get(self.id).get_Heading()
             longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
@@ -326,8 +377,10 @@ class UAV:
                 ,(location.center_lon + ((9*(10**(-6))*location.width)/2)
                     ,location.center_lat + ((9*(10**(-6))*location.height)/2))]
 
-            paths = search.area_search(angle = deg2rad(angle) ,pre_ve = pre_ve, poly = poly,xc=deg2rad(xc),xr=deg2rad(xr),
-                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha, turning_radius = self.turning_radius, step_size = step_size)
+            paths = search.area_search(angle = deg2rad(angle) ,pre_ve = pre_ve, poly = poly\
+                ,xc=deg2rad(xc),xr=deg2rad(xr),
+                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha\
+                , turning_radius = self.turning_radius, step_size = step_size)
             
             self.commandr = MissionCommand.MissionCommand()
             self.commandr.set_VehicleID(self.id)
@@ -355,10 +408,10 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commandr, True))
             return i
 
-    def loiter(self,location=None,pre_ve=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.5):
+    def loiter(self,location=None,pre_ve=None,angle=0,alpha=0.9,p=None,xc=0,xr=0,s=0, step_size = 0.003):
         
-        if self.state != 'area_search':
-            self.state = 'area_search'
+        if self.state != 'loiter':
+            self.state = 'loiter'
             nextWaypoint = Waypoint.Waypoint()
             heading = self.stateMap.get(self.id).get_Heading()
             longtitude = self.stateMap.get(self.id).get_Location().get_Longitude()
@@ -377,7 +430,8 @@ class UAV:
                     ,location.center_lat + ((9*(10**(-6))*location.height)/2))]
 
             paths = search.area_search(angle = deg2rad(angle) ,pre_ve = pre_ve, poly = poly,xc=deg2rad(xc),xr=deg2rad(xr),
-                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha, turning_radius = self.turning_radius, step_size = step_size)
+                s=s,d_t=self.d_t, p = p, d_w = self.d_w, d_l = self.d_l,alpha = alpha\
+                , turning_radius = self.turning_radius, step_size = step_size)
             
             self.commandr = MissionCommand.MissionCommand()
             self.commandr.set_VehicleID(self.id)
@@ -425,11 +479,15 @@ class UAV:
             self.commandr = MissionCommand.MissionCommand()
 
         if self.roam_log == 0:
-            self.rloc.append(Location(location.center_lat+float(location.height)/261538.0,location.center_lon+float(location.height)/261538.0,0,0))
-            self.rloc.append(Location(location.center_lat+float(location.height)/261538.0,location.center_lon-float(location.height)/261538.0,0,0))
-            self.rloc.append(Location(location.center_lat-float(location.height)/261538.0,location.center_lon+float(location.height)/261538.0,0,0))
+            self.rloc.append(Location(location.center_lat+float(location.height)/261538.0\
+                ,location.center_lon+float(location.height)/261538.0,0,0))
+            self.rloc.append(Location(location.center_lat+float(location.height)/261538.0\
+                ,location.center_lon-float(location.height)/261538.0,0,0))
+            self.rloc.append(Location(location.center_lat-float(location.height)/261538.0\
+                ,location.center_lon+float(location.height)/261538.0,0,0))
             self.rloc.append(Location(location.center_lat,location.center_lon,0,0))
-            self.rloc.append(Location(location.center_lat-float(location.height)/261538.0,location.center_lon-float(location.height)/261538.0,0,0))
+            self.rloc.append(Location(location.center_lat-float(location.height)/261538.0\
+                ,location.center_lon-float(location.height)/261538.0,0,0))
         
         if self.roam_log == 0:
             nextWaypoint = Waypoint.Waypoint()
@@ -450,7 +508,8 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commandr, True))
             self.roam_log += 1
 
-        if vincenty((self.getit('latitude',self.id),self.getit('longitude',self.id)), (self.rloc[(self.roam_log-1)%5].center_lat,self.rloc[(self.roam_log-1)%5].center_lon)).meters < 50:
+        if vincenty((self.getit('latitude',self.id),self.getit('longitude',self.id))\
+            , (self.rloc[(self.roam_log-1)%5].center_lat,self.rloc[(self.roam_log-1)%5].center_lon)).meters < 50:
             nextWaypoint = Waypoint.Waypoint()
             self.commandr.set_FirstWaypoint(counter)
             nextWaypoint.set_Number(counter)
@@ -468,6 +527,14 @@ class UAV:
             self.commandr.set_CommandID(0)
             self.sock.send(LMCPFactory.packMessage(self.commandr, True))
             self.roam_log += 1
+
+    def recharge(self):
+        entity = AirVehicleState.AirVehicleState()
+        entity.set_EnergyAvailable(100)
+        entity.set_ID(self.id)
+        entity.set_Location(self.stateMap.get(self.id).get_Location())
+        this = LMCPFactory.packMessage(entity, True)
+        self.sock.send(this)
 
     def refuel(self,location):
 
@@ -489,17 +556,14 @@ class UAV:
             self.commandf.set_CommandID(0)
         self.state = 'refueling'
 
-        if self.refueling < 1 and vincenty((location.center_lat,location.center_lon),(self.getit('latitude',self.id),self.getit('longitude',self.id))).meters > location.height:
+        if self.refueling < 1 and vincenty((location.center_lat,location.center_lon),(self.getit('latitude',self.id)\
+            ,self.getit('longitude',self.id))).meters > location.height:
             self.sock.send(LMCPFactory.packMessage(self.commandf, True))
             self.refueling += 1
 
-        if vincenty((location.center_lat,location.center_lon),(self.getit('latitude',self.id),self.getit('longitude',self.id))).meters < location.height:  
-            entity = AirVehicleState.AirVehicleState()
-            entity.set_Location(self.stateMap.get(self.id).get_Location())
-            entity.set_EnergyAvailable(100)
-            entity.set_ID(self.id)
-            this = LMCPFactory.packMessage(entity, True)
-            self.sock.send(this)
+        if vincenty((location.center_lat,location.center_lon),(self.getit('latitude',self.id),self.getit('longitude'\
+            ,self.id))).meters < location.height:  
+            self.recharge()
             self.refueling = 0
 
     def trackTarget(self,id2):
@@ -531,7 +595,10 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commandt, True)) 
 
         elif len(self.commandt.get_WaypointList()) > 1:
-            if (abs(self.commandt.get_WaypointList()[-1].get_Latitude() - nextWaypoint.get_Latitude())>0.00001 or abs(self.commandt.get_WaypointList()[-1].get_Longitude() - nextWaypoint.get_Longitude()) >0.00001) and vincenty((self.commandt.get_WaypointList()[-1].get_Latitude(),self.commandt.get_WaypointList()[-1].get_Longitude()), (nextWaypoint.get_Latitude(),nextWaypoint.get_Longitude())).meters > 300:
+            if (abs(self.commandt.get_WaypointList()[-1].get_Latitude() - nextWaypoint.get_Latitude())>0.00001\
+             or abs(self.commandt.get_WaypointList()[-1].get_Longitude() - nextWaypoint.get_Longitude()) >0.00001)\
+              and vincenty((self.commandt.get_WaypointList()[-1].get_Latitude(),self.commandt.get_WaypointList()[-1]\
+                .get_Longitude()), (nextWaypoint.get_Latitude(),nextWaypoint.get_Longitude())).meters > 300:
                 self.commandt.get_WaypointList().append(nextWaypoint)
                 self.commandt.set_VehicleID(self.id)
                 self.commandt.set_CommandID(0)
@@ -566,7 +633,8 @@ class UAV:
             self.sock.send(LMCPFactory.packMessage(self.commands, True))
             self.search_log += 1
 
-        if vincenty((self.getit('latitude',self.id),self.getit('longitude',self.id)), (self.sloc[self.search_log-1%4].center_lat,self.sloc[self.search_log-1%4].center_lon)).meters < 50:
+        if vincenty((self.getit('latitude',self.id),self.getit('longitude',self.id)),\
+         (self.sloc[self.search_log-1%4].center_lat,self.sloc[self.search_log-1%4].center_lon)).meters < 50:
             nextWaypoint = Waypoint.Waypoint()
             self.commands.set_FirstWaypoint(counter)
             nextWaypoint.set_Number(counter)
